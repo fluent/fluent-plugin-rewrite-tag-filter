@@ -1,0 +1,26 @@
+= fluent-plugin-rewrite-tag-filter
+
+== Component
+
+=== RewriteTagFilterOutput
+
+Modify Tags with data matches any of specified regexp patterns in specified attribute.
+
+== Configuration
+
+    <match td.apache.access>
+      type rewrite_tag_filter
+      rewriterule1 domain ^maps\.google\.com$ site.Google.Map
+      rewriterule2 domain ^news.google\.com$ site.Google.News
+      rewriterule3 agent (Googlebot|Crawler|Spyder) agen.Robot
+      rewriterule4 referer headlines\.yahoo\.co\.jp referer.YahooHeadlines
+    </match>
+
+== TODO
+
+- patches welcome!
+
+== Copyright
+
+Copyright:: Copyright (c) 2012- Kentaro Yoshida (yoshi_ken)
+License::   Apache License, Version 2.0
