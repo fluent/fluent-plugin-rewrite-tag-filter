@@ -1,0 +1,52 @@
+= fluent-plugin-rewrite-tag-filter
+
+== Overview
+
+=== RewriteTagFilterOutput
+
+Modify Tags with data matches any of specified regexp patterns in specified attribute.
+
+== Installation
+
+    # native fluentd user
+    gem install fluent-plugin-rewrite-tag-filter
+    
+    # td-agent user
+    /usr/lib64/fluent/ruby/bin/gem install fluent-plugin-rewrite-tag-filter
+
+== Configuration
+
+Format
+
+    rewruterule<num:1-200> <attribute> <regex_pattern> <rewrite_tag>
+
+Usage
+
+    <match td.apache.access>
+      type rewrite_tag_filter
+      rewriterule1 domain ^maps\.google\.com$ site.GoogleMap
+      rewriterule2 domain ^news\.google\.com$ site.GoogleNews
+      rewriterule3 domain ^mail\.google\.com$ site.GoogleMail
+    </match>
+
+    <match site.*>
+      type mongo
+      host 10.10.0.36
+      database apache_access
+      remove_tag_prefix site
+      capped
+      capped_size 100m
+    </match>
+
+Example
+
+    please check example.conf
+
+== TODO
+
+- patches welcome!
+
+== Copyright
+
+Copyright:: Copyright (c) 2012- Kentaro Yoshida
+License::   Apache License, Version 2.0

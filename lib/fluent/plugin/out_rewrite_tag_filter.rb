@@ -1,7 +1,7 @@
 class Fluent::RewriteTagFilterOutput < Fluent::Output
   Fluent::Plugin.register_output('rewrite_tag_filter', self)
 
-  PATTERN_MAX_NUM = 50
+  PATTERN_MAX_NUM = 200
 
   config_param :rewriterule1, :string # string: NAME REGEXP
   (2..PATTERN_MAX_NUM).each do |i|

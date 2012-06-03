@@ -5,10 +5,10 @@ Gem::Specification.new do |s|
   s.name        = "fluent-plugin-rewrite-tag-filter"
   s.version     = "0.0.1"
   s.authors     = ["Kentaro Yoshida"]
-  s.email       = [""]
+  s.email       = ["y.ken.studio@gmail.com"]
   s.homepage    = "https://github.com/y-ken/fluent-plugin-rewrite-tag-filter"
-  s.summary     = %q{Output filter plugin to rewrite tags that matches specified confitions}
-  s.description = %q{Output filter plugin to rewrite tags that matches specified confitions}
+  s.summary     = %q{Output filter plugin to rewrite tags that matches specified attribute}
+  s.description = %q{Modify Tags with data matches any of specified regexp patterns in specified attribute.}
 
   s.rubyforge_project = "fluent-plugin-rewrite-tag-filter"
 
