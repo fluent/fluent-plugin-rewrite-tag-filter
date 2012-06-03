@@ -12,7 +12,7 @@ Modify Tags with data matches any of specified regexp patterns in specified attr
       type rewrite_tag_filter
       rewriterule1 domain ^maps\.google\.com$ site.Google.Map
       rewriterule2 domain ^news.google\.com$ site.Google.News
-      rewriterule3 agent (Googlebot|Crawler|Spyder) agen.Robot
+      rewriterule3 agent (Googlebot|Crawler|Spyder) agent.Robot
       rewriterule4 referer headlines\.yahoo\.co\.jp referer.YahooHeadlines
     </match>
 
