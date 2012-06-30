@@ -40,7 +40,8 @@ Usage
 
 Example
 
-    please check example.conf
+- Example1: how to analyze response_time, response_code and user_agent for each virtual domain websites.
+  - https://github.com/y-ken/fluent-plugin-rewrite-tag-filter/blob/master/example.conf
 
 == TODO
 
