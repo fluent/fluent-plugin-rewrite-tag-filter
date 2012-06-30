@@ -18,7 +18,7 @@ Modify Tags with data matches any of specified regexp patterns in specified attr
 
 Format
 
-    rewruterule<num:1-200> <attribute> <regex_pattern> <rewrite_tag>
+    rewruterule<num:1-200> <attribute> <regex_pattern> <new_tag>
 
 Usage
 
@@ -34,13 +34,16 @@ Usage
       host 10.10.0.36
       database apache_access
       remove_tag_prefix site
+      tag_mapped
+      collection misc
       capped
       capped_size 100m
     </match>
 
 Example
 
-    please check example.conf
+- Example1: how to analyze response_time, response_code and user_agent for each virtual domain websites.
+  - https://github.com/y-ken/fluent-plugin-rewrite-tag-filter/blob/master/example.conf
 
 == TODO
 
@@ -50,3 +53,4 @@ Example
 
 Copyright:: Copyright (c) 2012- Kentaro Yoshida
 License::   Apache License, Version 2.0
+
