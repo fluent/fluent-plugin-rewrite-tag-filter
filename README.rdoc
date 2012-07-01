@@ -31,7 +31,7 @@ Usage
 
     <match site.*>
       type mongo
-      host 10.10.0.36
+      host localhost
       database apache_access
       remove_tag_prefix site
       tag_mapped
@@ -39,6 +39,17 @@ Usage
       capped
       capped_size 100m
     </match>
+
+Result
+
+    $ mongo
+    MongoDB shell version: 2.0.6
+    > use apache_access
+    switched to db apache_access
+    > show collections
+    GoogleMap
+    GoogleNews
+    GoogleMail
 
 == Example
 
