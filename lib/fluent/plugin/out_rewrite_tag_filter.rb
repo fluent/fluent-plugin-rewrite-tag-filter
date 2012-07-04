@@ -20,9 +20,12 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     end
     (1..PATTERN_MAX_NUM).each do |i|
       next unless conf["rewriterule#{i}"]
-      name,regexp,tag = conf["rewriterule#{i}"].split(' ', 3)
-      @rewriterules.push([i, name, Regexp.new(regexp), tag])
-      rewriterule_names.push(name + regexp)
+      rewritekey,regexp,rewritetag = conf["rewriterule#{i}"].split(' ', 3)
+      unless regexp != nil && rewritetag != nil
+        raise Fluent::ConfigError, "missing values at " + "rewriterule#{i} " + conf["rewriterule#{i}"].inspect
+      end 
+      @rewriterules.push([i, rewritekey, Regexp.new(regexp), rewritetag])
+      rewriterule_names.push(rewritekey + regexp)
     end
     rewriterule_index_list = conf.keys.select{|s| s =~ /^rewriterule\d$/}.map{|v| (/^rewriterule(\d)$/.match(v))[1].to_i}
     unless rewriterule_index_list.reduce(true){|v,i| v and @rewriterules[i - 1]}
