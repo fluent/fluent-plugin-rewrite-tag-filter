@@ -22,11 +22,22 @@ Format
 
 Usage
 
+    # It's a sample to exclude some patterns before split tag by domain.
+    <source>
+      type tail
+      path /var/log/httpd/access_log
+      format /^(?<domain>[^ ]*) (?<host>[^ ]*) [^ ]* (?<user>[^ ]*) \[(?<time>[^\]]*)\] "(?<method>\S+)(?: +(?<path>[^ ]*) +\S*)?" (?<status>[^ ]*) (?<size>[^ ]*)(?: "(?<referer>[^\"]*)" "(?<agent>[^\"]*)" (?<response_time>[^ ]*))?$/
+      time_format %d/%b/%Y:%H:%M:%S %z
+      tag td.apache.access
+      pos_file /var/log/td-agent/apache_access.pos
+    </source>
+
     <match td.apache.access>
       type rewrite_tag_filter
-      rewriterule1 domain ^maps\.google\.com$ site.GoogleMap
-      rewriterule2 domain ^news\.google\.com$ site.GoogleNews
-      rewriterule3 domain ^mail\.google\.com$ site.GoogleMail
+      rewriterule1 path \.(gif|jpe?g|png|pdf|zip)$ clear
+      rewriterule2 domain ^maps\.google\.com$ site.GoogleMap
+      rewriterule3 domain ^news\.google\.com$ site.GoogleNews
+      rewriterule4 domain ^mail\.google\.com$ site.GoogleMail
     </match>
 
     <match site.*>
@@ -38,6 +49,10 @@ Usage
       collection misc
       capped
       capped_size 100m
+    </match>
+
+    <match clear>
+      type null
     </match>
 
 Result
