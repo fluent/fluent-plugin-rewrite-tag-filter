@@ -4,7 +4,9 @@
 
 === RewriteTagFilterOutput
 
-Modify Tags with data matches any of specified regexp patterns in specified attribute.
+It has designed to rewrite tags like mod_rewrite.
+Also you can change a tag from apache log by domain, status-code(ex. 500 error), 
+user-agent, and request-uri and so on with regular expression. 
 
 == Installation
 
@@ -22,7 +24,7 @@ Format
 
 Usage
 
-    # It's a sample to exclude some patterns before split tag by domain.
+    # It's a sample to exclude some static file log before split tag by domain.
     <source>
       type tail
       path /var/log/httpd/access_log
@@ -38,6 +40,7 @@ Usage
       rewriterule2 domain ^maps\.google\.com$ site.GoogleMap
       rewriterule3 domain ^news\.google\.com$ site.GoogleNews
       rewriterule4 domain ^mail\.google\.com$ site.GoogleMail
+      rewriterule5 domain .+ site.unmatched
     </match>
 
     <match site.*>
@@ -46,7 +49,6 @@ Usage
       database apache_access
       remove_tag_prefix site
       tag_mapped
-      collection misc
       capped
       capped_size 100m
     </match>
@@ -65,6 +67,7 @@ Result
     GoogleMap
     GoogleNews
     GoogleMail
+    unmatched
 
 == Example
 
@@ -74,12 +77,17 @@ Result
 - Example2: how to exclude specified patterns before analyze response_time for each virtual domain websites.
   - https://github.com/y-ken/fluent-plugin-rewrite-tag-filter/blob/master/example2.conf
 
+== Review
+
+- 自在にタグを書き換える fluent-plugin-rewrite-tag-filter でログ解析が捗るお話 #fluentd
+  - http://d.hatena.ne.jp/yoshi-ken/20120701/1341137269
+
 == TODO
 
 - patches welcome!
 
 == Copyright
 
-Copyright:: Copyright (c) 2012- Kentaro Yoshida
+Copyright:: Copyright (c) 2012- Kentaro Yoshida (@yoshi_ken)
 License::   Apache License, Version 2.0
 
