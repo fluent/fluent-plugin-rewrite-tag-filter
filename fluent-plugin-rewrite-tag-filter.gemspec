@@ -7,8 +7,8 @@ Gem::Specification.new do |s|
   s.authors     = ["Kentaro YOSHIDA"]
   s.email       = ["y.ken.studio@gmail.com"]
   s.homepage    = "https://github.com/y-ken/fluent-plugin-rewrite-tag-filter"
-  s.summary     = %q{Fluentd Output filter plugin to rewrite tags that matches specified attribute.}
-  s.description = %q{Rewrite Tags with data matches any of specified regexp patterns in specified attribute.}
+  s.summary     = %q{Fluentd Output filter plugin. It has designed to rewrite tag like mod_rewrite. Also you can change a tag from apache log by domain, status-code(ex. 500 error), user-agent, and request-uri and so on with regular expression.}
+  s.description = %q{Fluentd Output filter plugin. It has designed to rewrite tag like mod_rewrite. Also you can change a tag from apache log by domain, status-code(ex. 500 error), user-agent, and request-uri and so on with regular expression.}
 
   s.rubyforge_project = "fluent-plugin-rewrite-tag-filter"
 
