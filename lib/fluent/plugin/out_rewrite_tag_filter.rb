@@ -27,7 +27,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
       end 
       @rewriterules.push([i, rewritekey, Regexp.new(regexp), rewritetag])
       rewriterule_names.push(rewritekey + regexp)
-      $log.info "register rewrite_tag_filter rule: #{@rewriterules.last}"
+      $log.info "adding rewrite_tag_filter rule: #{@rewriterules.last}"
     end
     rewriterule_index_list = conf.keys.select{|s| s =~ /^rewriterule\d$/}.map{|v| (/^rewriterule(\d)$/.match(v))[1].to_i}
     unless rewriterule_index_list.reduce(true){|v,i| v and @rewriterules[i - 1]}
