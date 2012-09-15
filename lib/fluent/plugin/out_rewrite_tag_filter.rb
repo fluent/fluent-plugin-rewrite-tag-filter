@@ -20,7 +20,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     end
     (1..PATTERN_MAX_NUM).each do |i|
       next unless conf["rewriterule#{i}"]
-      rewritekey,regexp,rewritetag = conf["rewriterule#{i}"].split(/^(\S+) "?([\S\s]+?)"? (\S+)$/).reject(&:empty?)
+      rewritekey,regexp,rewritetag = conf["rewriterule#{i}"].match(/([^ ]+)\s(.+)\s([^ ]+)/)[1,3].to_a
       unless regexp != nil && rewritetag != nil
         raise Fluent::ConfigError, "missing values at " + "rewriterule#{i} " + conf["rewriterule#{i}"].inspect
       end 

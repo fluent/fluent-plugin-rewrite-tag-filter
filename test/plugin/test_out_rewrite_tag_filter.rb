@@ -8,7 +8,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
   CONFIG = %[
     rewriterule1 domain ^www\.google\.com$ site.Google
     rewriterule2 domain ^news\.google\.com$ site.GoogleNews
-    rewriterule3 agent "Mac OS X" agent.MacOSX
+    rewriterule3 agent Mac\sOS\sX agent.MacOSX
   ]
 
   def create_driver(conf=CONFIG,tag='test')
@@ -38,9 +38,12 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     end
     emits = d1.emits
     assert_equal 3, emits.length
+    p emits[0]
     assert_equal 'site.Google', emits[0][0] # tag
+    p emits[1]
     assert_equal 'site.GoogleNews', emits[1][0] # tag
     assert_equal 'news.google.com', emits[1][2]['domain']
+    p emits[2]
     assert_equal 'agent.MacOSX', emits[2][0] #tag
   end
 end
