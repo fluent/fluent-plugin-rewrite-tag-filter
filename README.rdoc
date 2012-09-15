@@ -23,7 +23,7 @@ Syntax
     rewruterule<num:1-200> <attribute> <regex_pattern> <new_tag>
     
     # Option: Capitalize every matched regex backreference (ex: $1, $2).
-    # It has described on Usage at rewriterule4.
+    # It has described on usage section below.
     capitalize_regex_backreference <default:no>
 
 Usage
@@ -44,6 +44,7 @@ Usage
       rewriterule1 path \.(gif|jpe?g|png|pdf|zip)$ clear
       rewriterule2 domain ^maps\.example\.com$ site.ExampleMaps
       rewriterule3 domain ^news\.example\.com$ site.ExampleNews
+      # "site.$2$1" to be "site.ExampleMail" by capitalize_regex_backreference option.
       rewriterule4 domain ^(mail)\.(example)\.com$ site.$2$1
       rewriterule5 domain .+ site.unmatched
     </match>
