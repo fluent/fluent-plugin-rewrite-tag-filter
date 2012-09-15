@@ -83,10 +83,13 @@ Result
 - Example2: how to exclude specified patterns before analyze response_time for each virtual domain websites.
   - https://github.com/y-ken/fluent-plugin-rewrite-tag-filter/blob/master/example2.conf
 
-== Review
+== Topic
 
 - 自在にタグを書き換える fluent-plugin-rewrite-tag-filter でログ解析が捗るお話 #fluentd
   - http://d.hatena.ne.jp/yoshi-ken/20120701/1341137269
+
+- Fluentd & TreasureDataで こっそり始めるログ集計 Fluentd Meetup #2 @mikeda
+  - http://www.slideshare.net/baguzy/fluentd-meetup-2-14073930
 
 == TODO
 
