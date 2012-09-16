@@ -44,14 +44,14 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
       @rewriterules.each do |index, rewritekey, regexp, rewritetag|
         rewritevalue = record[rewritekey]
         next if rewritevalue.nil?
-        if (regexp && regexp.match(rewritevalue))
-          rewrite = true
-          tag = rewritetag
-          if rewritetag.include?('$')
-            tag = rewritetag.gsub(/\$\d+/, map_regex_table($~.captures))
-          end
-          break
-        end
+        next unless (regexp && regexp.match(rewritevalue))
+        rewrite = true
+        tag = if rewritetag.include?('$')
+                rewritetag.gsub(/\$\d+/, map_regex_table($~.captures))
+              else
+                rewritetag
+              end
+        break
       end
       Fluent::Engine.emit(tag, time, record) if (rewrite)
     end
