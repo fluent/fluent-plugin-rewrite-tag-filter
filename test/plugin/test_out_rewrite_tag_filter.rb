@@ -14,7 +14,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
 
   CONFIG2 = %[
     capitalize_regex_backreference yes
-    rewriterule1 domain ^www\.google\.com$ site.Google
+    rewriterule1 domain ^www\.google\.com$ site.Google # some comment
     rewriterule2 domain ^(news)\.(google)\.com$ site.$2$1
     rewriterule3 agent Mac\sOS\sX agent.MacOSX
     rewriterule4 agent (Googlebot|CustomBot)-([a-zA-Z]+) agent.$1-$2
