@@ -12,12 +12,12 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     rewriterule4 agent (Googlebot|CustomBot)-([a-zA-Z]+) agent.$1-$2
   ]
 
-  # agresive test
+  # aggresive test for indentation, comment, capitalize_regex_backreference, regex with space aside
   CONFIG2 = %[
     capitalize_regex_backreference yes
     rewriterule1 domain ^www\.google\.com$                site.Google # some comment
     rewriterule2 domain ^(news)\.(google)\.com$           site.$2$1
-    rewriterule3 agent  Mac\sOS\sX                        agent.MacOSX
+    rewriterule3 agent  " Mac OS X "                      agent.MacOSX
     rewriterule4 agent  (Googlebot|CustomBot)-([a-zA-Z]+) agent.$1-$2
   ]
 
