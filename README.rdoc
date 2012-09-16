@@ -22,8 +22,7 @@ user-agent, request-uri, regex-backreference and so on with regular expression.
 
     rewruterule<num:1-200> <attribute> <regex_pattern> <new_tag>
     
-    # Option: Capitalize every matched regex backreference. (ex: $1, $2)
-    # It has described on usage section below.
+    # Capitalize every matched regex backreference. (ex: $1, $2)
     capitalize_regex_backreference <yes/no(default)>
 
 === Usage
