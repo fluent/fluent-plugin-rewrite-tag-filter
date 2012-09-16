@@ -7,7 +7,7 @@ Gem::Specification.new do |s|
   s.authors     = ["Kentaro Yoshida"]
   s.email       = ["y.ken.studio@gmail.com"]
   s.homepage    = "https://github.com/y-ken/fluent-plugin-rewrite-tag-filter"
-  s.summary     = %q{Fluentd Output filter plugin. It has designed to rewrite tag like mod_rewrite. Also you can change a tag from apache log by domain, status-code(ex. 500 error), user-agent, and request-uri and so on with regular expression.}
+  s.summary     = %q{Fluentd Output filter plugin. It has designed to rewrite tag like mod_rewrite. Also you can change a tag from apache log by domain, status-code(ex. 500 error), user-agent, request-uri, regex-backreference and so on with regular expression.}
   # s.description = %q{Fluentd Output filter plugin. It has designed to rewrite tag like mod_rewrite. Also you can change a tag from apache log by domain, status-code(ex. 500 error), user-agent, and request-uri and so on with regular expression.}
 
   s.files         = `git ls-files`.split("\n")

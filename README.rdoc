@@ -6,29 +6,30 @@
 
 It has designed to rewrite tags like mod_rewrite.
 Also you can change a tag from apache log by domain, status-code(ex. 500 error), 
-user-agent, and request-uri and so on with regular expression. 
+user-agent, request-uri, regex-backreference and so on with regular expression. 
 
 == Installation
 
-    # native fluentd user
+    # native gem
     gem install fluent-plugin-rewrite-tag-filter
     
-    # td-agent user
+    # td-agent gem
     /usr/lib64/fluent/ruby/bin/fluent-gem install fluent-plugin-rewrite-tag-filter
 
 == Configuration
 
-Syntax
+=== Syntax
 
     rewruterule<num:1-200> <attribute> <regex_pattern> <new_tag>
     
-    # Option: Capitalize every matched regex backreference (ex: $1, $2).
+    # Option: Capitalize every matched regex backreference. (ex: $1, $2)
     # It has described on usage section below.
-    capitalize_regex_backreference <default:no>
+    capitalize_regex_backreference <yes/no(default)>
 
-Usage
+=== Usage
 
-    # It's a sample to exclude some static file log before split tag by domain.
+It's a sample to exclude some static file log before split tag by domain.
+
     <source>
       type tail
       path /var/log/httpd/access_log
@@ -63,7 +64,7 @@ Usage
       type null
     </match>
 
-Result
+=== Result
 
     $ mongo
     MongoDB shell version: 2.2.0
@@ -74,6 +75,18 @@ Result
     ExampleNews
     ExampleMail
     unmatched
+
+=== Debug
+
+Logging supported like below.
+
+    $ tailf /var/log/td-agent/td-agent.log
+    2012-09-16 18:10:51 +0900: adding match pattern="td.apache.access" type="rewrite_tag_filter"
+    2012-09-16 18:10:51 +0900: adding rewrite_tag_filter rule: [1, "path", /\.(gif|jpe?g|png|pdf|zip)$/, "clear"]
+    2012-09-16 18:10:51 +0900: adding rewrite_tag_filter rule: [2, "domain", /^maps\.example\.com$/, "site.ExampleMaps"]
+    2012-09-16 18:10:51 +0900: adding rewrite_tag_filter rule: [3, "domain", /^news\.example\.com$/, "site.ExampleNews"]
+    2012-09-16 18:10:51 +0900: adding rewrite_tag_filter rule: [4, "domain", /^(mail)\.(example)\.com$/, "site.$2$1"]
+    2012-09-16 18:10:51 +0900: adding rewrite_tag_filter rule: [5, "domain", /.+/, "site.unmatched"]
 
 == Example
 
