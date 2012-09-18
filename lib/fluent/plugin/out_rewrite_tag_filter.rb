@@ -61,6 +61,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
 
   def trim_regex_quote(regexp)
     if regexp.start_with?('"') && regexp.end_with?('"')
+      $log.info "rewrite_tag_filter: [DEPRECATED] Use ^....$ pattern for partial word match instead of double-quote-delimiter. #{regexp}"
       return regexp[1..-2]
     end
     return regexp
