@@ -21,11 +21,11 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     end
     (1..PATTERN_MAX_NUM).each do |i|
       next unless conf["rewriterule#{i}"]
-      rewritekey,regexp,rewritetag = conf["rewriterule#{i}"].match(/^([^\s]+)\s+["\/]?(.+?)["\/]?\s+([^\s]+)$/).captures
-      unless regexp != nil && rewritetag != nil
+      rewritekey,regexp,rewritetag = conf["rewriterule#{i}"].match(/^([^\s]+)\s+(.+?)\s+([^\s]+)$/).captures
+      if regexp.nil? || rewritetag.nil?
         raise Fluent::ConfigError, "missing values at rewriterule#{i} " + conf["rewriterule#{i}"].inspect
-      end 
-      @rewriterules.push([i, rewritekey, Regexp.new(regexp), rewritetag])
+      end
+      @rewriterules.push([i, rewritekey, Regexp.new(trim_regex_quote(regexp)), rewritetag])
       rewriterule_names.push(rewritekey + regexp)
       $log.info "adding rewrite_tag_filter rule: #{@rewriterules.last}"
     end
@@ -57,6 +57,13 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     end
 
     chain.next
+  end
+
+  def trim_regex_quote(regexp)
+    if regexp.start_with?('"') && regexp.end_with?('"')
+      return regexp[1..-2]
+    end
+    return regexp
   end
 
   def map_regex_table(elements)

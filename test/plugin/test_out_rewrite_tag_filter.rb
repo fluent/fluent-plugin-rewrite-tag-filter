@@ -8,18 +8,19 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
   CONFIG = %[
     rewriterule1 domain ^www\.google\.com$ site.Google
     rewriterule2 domain ^news\.google\.com$ site.GoogleNews
-    rewriterule3 agent Mac\sOS\sX agent.MacOSX
+    rewriterule3 agent .* Mac OS X .* agent.MacOSX
     rewriterule4 agent (Googlebot|CustomBot)-([a-zA-Z]+) agent.$1-$2
   ]
 
   # aggresive test
-  # indentation, comment, capitalize_regex_backreference, regex with space aside, slash/quote delimited
+  # indentation, comment, capitalize_regex_backreference, regex with space aside, quote delimited
+  # Note: Use ^....$ pattern because double quote delimited is deprecated.
   CONFIG2 = %[
     capitalize_regex_backreference yes
-    rewriterule1 domain "^www\.google\.com$"                site.Google # some comment
-    rewriterule2 domain /^(news)\.(google)\.com$/           site.$2$1
-    rewriterule3 agent  / Mac OS X /                        agent.MacOSX
-    rewriterule4 agent  /(Googlebot|CustomBot)-([a-zA-Z]+)/ agent.$1-$2
+    rewriterule1 domain ^www\.google\.com$                  site.Google # some comment
+    rewriterule2 domain ^(news)\.(google)\.com$             site.$2$1
+    rewriterule3 agent  ^.* Mac OS X .*$                    agent.MacOSX
+    rewriterule4 agent  "(Googlebot|CustomBot)-([a-zA-Z]+)" agent.$1-$2
   ]
 
   def create_driver(conf=CONFIG,tag='test')
