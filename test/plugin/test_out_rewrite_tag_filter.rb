@@ -13,8 +13,8 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
   ]
 
   # aggresive test
-  # indentation, comment, capitalize_regex_backreference, regex with space aside, quote delimited
-  # Note: Use ^....$ pattern because double quote delimited is deprecated.
+  # indentation, comment, capitalize_regex_backreference, regex with space aside, quote delimiter
+  # Note: Use ^....$ pattern instead of deprecated double quote delimiter.
   CONFIG2 = %[
     capitalize_regex_backreference yes
     rewriterule1 domain ^www\.google\.com$                  site.Google # some comment
