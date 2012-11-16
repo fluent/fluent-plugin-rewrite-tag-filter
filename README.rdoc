@@ -112,6 +112,9 @@ Supporing these placeholder for new_tag(rewrited tag).
 - Fluentd & TreasureDataで こっそり始めるログ集計 Fluentd Meetup #2 @mikeda
   - http://www.slideshare.net/baguzy/fluentd-meetup-2-14073930
 
+- 似てる #fluentd プラグインの比較
+  - http://matsumana.wordpress.com/2012/11/15/%E4%BC%BC%E3%81%A6%E3%82%8B-fluentd-%E3%83%97%E3%83%A9%E3%82%B0%E3%82%A4%E3%83%B3%E3%81%AE%E6%AF%94%E8%BC%83/
+
 == TODO
 
 - patches welcome!
