@@ -14,6 +14,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
 
     @rewriterules = []
     rewriterule_names = []
+    @hostname = `hostname`.chomp
 
     invalids = conf.keys.select{|k| k =~ /^rewriterule(\d+)$/}.select{|arg| arg =~ /^rewriterule(\d+)/ and not (1..PATTERN_MAX_NUM).include?($1.to_i)}
     if invalids.size > 0
@@ -39,6 +40,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
   end
 
   def emit(tag, es, chain)
+    placeholder = get_placeholder(tag)
     es.each do |time,record|
       rewrite = false
       @rewriterules.each do |index, rewritekey, regexp, rewritetag|
@@ -46,6 +48,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
         next if rewritevalue.nil?
         next unless (regexp && regexp.match(rewritevalue))
         rewrite = true
+        placeholder.each { |key, value| rewritetag.gsub!(key, value) }
         tag = if rewritetag.include?('$')
                 rewritetag.gsub(/\$\d+/, map_regex_table($~.captures))
               else
@@ -76,5 +79,17 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     end
     return hash_table
   end
+
+  def get_placeholder(tag)
+    return {
+      '__hostname__' => @hostname,
+      '__HOSTNAME__' => @hostname,
+      '${hostname}' => @hostname,
+      '${HOSTNAME}' => @hostname,
+      '__tag__' => tag,
+      '__TAG__' => tag,
+      '${tag}' => tag,
+      '${TAG}' => tag,
+    }
 end
 
