@@ -10,6 +10,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     rewriterule2 domain ^news\.google\.com$ site.GoogleNews
     rewriterule3 agent .* Mac OS X .* agent.MacOSX
     rewriterule4 agent (Googlebot|CustomBot)-([a-zA-Z]+) agent.$1-$2
+    rewriterule5 domain ^(tagtest)\.google\.com$ site.${tag}.$1
   ]
 
   # aggresive test
@@ -48,9 +49,10 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       d1.emit({'domain' => 'news.google.com', 'path' => '/', 'agent' => 'Googlebot-Mobile', 'response_time' => 900000})
       d1.emit({'domain' => 'map.google.com', 'path' => '/', 'agent' => 'Macintosh; Intel Mac OS X 10_7_4', 'response_time' => 900000})
       d1.emit({'domain' => 'labs.google.com', 'path' => '/', 'agent' => 'Mozilla/5.0 Googlebot-FooBar/2.1', 'response_time' => 900000})
+      d1.emit({'domain' => 'tagtest.google.com', 'path' => '/', 'agent' => 'Googlebot', 'response_time' => 900000})
     end
     emits = d1.emits
-    assert_equal 4, emits.length
+    assert_equal 5, emits.length
     p emits[0]
     assert_equal 'site.Google', emits[0][0] # tag
     p emits[1]
@@ -60,6 +62,8 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     assert_equal 'agent.MacOSX', emits[2][0] #tag
     p emits[3]
     assert_equal 'agent.Googlebot-FooBar', emits[3][0] #tag
+    p emits[4]
+    assert_equal 'site.input.access.tagtest', emits[4][0] #tag
   end
 
   def test_emit2

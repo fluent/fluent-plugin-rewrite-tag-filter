@@ -87,6 +87,15 @@ On starting td-agent, Logging supported like below.
     2012-09-16 18:10:51 +0900: adding rewrite_tag_filter rule: [4, "domain", /^(mail)\.(example)\.com$/, "site.$2$1"]
     2012-09-16 18:10:51 +0900: adding rewrite_tag_filter rule: [5, "domain", /.+/, "site.unmatched"]
 
+=== Tag placeholder
+
+Supporing these placeholder for rewrite tag.
+
+* ${hostname}
+* __HOSTNAME__
+* ${tag}
+* __TAG__
+
 == Example
 
 - Example1: how to analyze response_time, response_code and user_agent for each virtual domain websites.

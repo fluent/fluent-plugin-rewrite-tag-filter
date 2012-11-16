@@ -47,13 +47,10 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
         rewritevalue = record[rewritekey]
         next if rewritevalue.nil?
         next unless (regexp && regexp.match(rewritevalue))
+        backreference_table = map_regex_table($~.captures)
         rewrite = true
-        rewritetag = rewritetag.gsub!(/[{_](tag|hostname)[}_]/i, placeholder)
-        tag = if rewritetag.include?('$')
-                rewritetag.gsub(/\$\d+/, map_regex_table($~.captures))
-              else
-                rewritetag
-              end
+        rewritetag.gsub!(/(\${[a-z]+}|__[A-Z]+__)/, placeholder)
+        tag = rewritetag.gsub(/\$\d+/, backreference_table)
         break
       end
       Fluent::Engine.emit(tag, time, record) if (rewrite)
@@ -87,5 +84,6 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
       '__TAG__' => tag,
       '${tag}' => tag,
     }
+  end
 end
 
