@@ -48,7 +48,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
         next if rewritevalue.nil?
         next unless (regexp && regexp.match(rewritevalue))
         rewrite = true
-        placeholder.each { |key, value| rewritetag.gsub!(key, value) }
+        rewritetag = rewritetag.gsub!(/[{_](tag|hostname)[}_]/i, placeholder)
         tag = if rewritetag.include?('$')
                 rewritetag.gsub(/\$\d+/, map_regex_table($~.captures))
               else
@@ -82,14 +82,10 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
 
   def get_placeholder(tag)
     return {
-      '__hostname__' => @hostname,
       '__HOSTNAME__' => @hostname,
       '${hostname}' => @hostname,
-      '${HOSTNAME}' => @hostname,
-      '__tag__' => tag,
       '__TAG__' => tag,
       '${tag}' => tag,
-      '${TAG}' => tag,
     }
 end
 
