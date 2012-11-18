@@ -91,10 +91,24 @@ On starting td-agent, Logging supported like below.
 
 Supporing these placeholder for new_tag(rewrited tag).
 
-* ${hostname}
-* __HOSTNAME__
-* ${tag}
-* __TAG__
+- ${hostname}
+- __HOSTNAME__
+- ${tag}
+- __TAG__
+
+It's a sample to rewrite a tag with placeholder.
+
+    # It will get "rewrited.apache.access.ExampleMail"
+     <match apache.access>
+      type rewrite_tag_filter
+      rewriterule1 domain ^(mail)\.(example)\.com$    rewrited.${tag}.$2$1
+    </match>
+
+    # It will get "rewrited.ExampleMail.app30-124.foo.com" when hostname is "app30-124.foo.com"
+     <match apache.access>
+      type rewrite_tag_filter
+      rewriterule1 domain ^(mail)\.(example)\.com$    rewrited.$2$1.${hostname}
+    </match>
 
 == Example
 
