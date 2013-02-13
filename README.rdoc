@@ -4,9 +4,10 @@
 
 === RewriteTagFilterOutput
 
-It has designed to rewrite tags like mod_rewrite.
+Fluentd Output filter plugin. It has designed to rewrite tag like mod_rewrite.
+Re-emmit a record with rewrited tag when a value matches with the regular expression.
 Also you can change a tag from apache log by domain, status-code(ex. 500 error), 
-user-agent, request-uri, regex-backreference and so on with regular expression. 
+user-agent, request-uri, regex-backreference and so on with regular expression.
 
 == Installation
 
