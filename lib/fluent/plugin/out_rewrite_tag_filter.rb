@@ -68,6 +68,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
   end
 
   def map_regex_table(elements)
+    # TODO: use each.with_index http://shirusu-ni-tarazu.hatenablog.jp/entry/2012/11/04/173513
     hash_table = Hash.new
     index = 1
     elements.each do |value|
