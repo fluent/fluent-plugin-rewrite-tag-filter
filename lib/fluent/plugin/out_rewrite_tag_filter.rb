@@ -44,7 +44,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     es.each do |time,record|
       rewrite = false
       @rewriterules.each do |index, rewritekey, regexp, rewritetag|
-        rewritevalue = record[rewritekey]
+        rewritevalue = record[rewritekey].to_s
         next if rewritevalue.nil?
         next unless (regexp && regexp.match(rewritevalue))
         backreference_table = map_regex_table($~.captures)
