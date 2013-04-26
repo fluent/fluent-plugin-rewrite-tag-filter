@@ -8,6 +8,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     config_param ('rewriterule' + i.to_s).to_sym, :string, :default => nil # NAME REGEXP
   end
   config_param :capitalize_regex_backreference, :bool, :default => false
+  config_param :remove_tag_prefix, :string, :default => nil
 
   def configure(conf)
     super
@@ -36,6 +37,10 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     end
     unless @rewriterules.length == rewriterule_names.uniq.length
       raise Fluent::ConfigError, "duplicated rewriterules found #{@rewriterules.inspect}"
+    end
+
+    if remove_tag_prefix = conf['remove_tag_prefix']
+      @remove_tag_prefix = Regexp.new('^' + Regexp.escape(remove_tag_prefix))
     end
   end
 
@@ -79,6 +84,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
   end
 
   def get_placeholder(tag)
+   tag = tag.gsub(@remove_tag_prefix, '') if @remove_tag_prefix
     return {
       '__HOSTNAME__' => @hostname,
       '${hostname}' => @hostname,
