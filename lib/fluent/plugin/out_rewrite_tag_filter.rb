@@ -39,8 +39,8 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
       raise Fluent::ConfigError, "duplicated rewriterules found #{@rewriterules.inspect}"
     end
 
-    if remove_tag_prefix = conf['remove_tag_prefix']
-      @remove_tag_prefix = Regexp.new('^' + Regexp.escape(remove_tag_prefix))
+    unless conf['remove_tag_prefix'].nil?
+      @remove_tag_prefix = Regexp.new("^#{Regexp.escape(remove_tag_prefix)}\.?")
     end
   end
 

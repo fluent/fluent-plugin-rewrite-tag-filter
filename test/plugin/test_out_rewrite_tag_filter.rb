@@ -24,6 +24,12 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     rewriterule4 agent  "(Googlebot|CustomBot)-([a-zA-Z]+)" agent.$1-$2
   ]
 
+  # remove_tag_prefix test
+  CONFIG3 = %[
+    rewriterule1 domain ^www\.google\.com$ ${tag}
+    remove_tag_prefix input
+  ]
+
   def create_driver(conf=CONFIG,tag='test')
     Fluent::Test::OutputTestDriver.new(Fluent::RewriteTagFilterOutput, tag).configure(conf)
   end
@@ -86,6 +92,18 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     assert_equal 'agent.MacOSX', emits[2][0] #tag
     p emits[3]
     assert_equal 'agent.Googlebot-Foobar', emits[3][0] #tag
+  end
+
+  def test_emit3
+    d1 = create_driver(CONFIG3, 'input.access')
+    time = Time.parse("2012-01-02 13:14:15").to_i
+    d1.run do
+      d1.emit({'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
+    end
+    emits = d1.emits
+    assert_equal 1, emits.length
+    p emits[0]
+    assert_equal 'access', emits[0][0] # tag
   end
 end
 
