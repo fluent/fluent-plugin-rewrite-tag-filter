@@ -75,14 +75,13 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
   def map_regex_table(elements)
     hash_table = Hash.new
     elements.each.with_index(1) do |value, index|
-      puts "index:#{index} value:#{value.inspect}"
       hash_table["$#{index}"] = @capitalize_regex_backreference ? value.capitalize : value
     end
     return hash_table
   end
 
   def get_placeholder(tag)
-    tag = tag.gsub(@remove_tag_prefix, '') if @remove_tag_prefix
+    tag = tag.sub(@remove_tag_prefix, '') if @remove_tag_prefix
     return {
       '__HOSTNAME__' => @hostname,
       '${hostname}' => @hostname,

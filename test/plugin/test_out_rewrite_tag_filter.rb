@@ -49,7 +49,6 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
 
   def test_emit
     d1 = create_driver(CONFIG, 'input.access')
-    time = Time.parse("2012-01-02 13:14:15").to_i
     d1.run do
       d1.emit({'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
       d1.emit({'domain' => 'news.google.com', 'path' => '/', 'agent' => 'Googlebot-Mobile', 'response_time' => 900000})
@@ -74,7 +73,6 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
 
   def test_emit2
     d1 = create_driver(CONFIG2, 'input.access')
-    time = Time.parse("2012-01-02 13:14:15").to_i
     d1.run do
       d1.emit({'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
       d1.emit({'domain' => 'news.google.com', 'path' => '/', 'agent' => 'Googlebot-Mobile', 'response_time' => 900000})
@@ -96,7 +94,6 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
 
   def test_emit3
     d1 = create_driver(CONFIG3, 'input.access')
-    time = Time.parse("2012-01-02 13:14:15").to_i
     d1.run do
       d1.emit({'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
     end
