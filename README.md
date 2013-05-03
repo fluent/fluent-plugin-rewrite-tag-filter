@@ -102,12 +102,12 @@ $ tailf /var/log/td-agent/td-agent.log
 
 Supporing these placeholder for new_tag(rewrited tag).  
 It's available to use this placeholder with `remove_tag_prefix` option.  
-This feature adds removing tag prefix for ${tag} or __TAG__ in placeholder.
+This feature adds removing tag prefix for `${tag}` or `__TAG__` in placeholder.
 
-- ${hostname}
-- __HOSTNAME__
-- ${tag}
-- __TAG__
+- `${hostname}`
+- `__HOSTNAME__`
+- `${tag}`
+- `__TAG__`
 
 It's a sample to rewrite a tag with placeholder.
 
