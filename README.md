@@ -38,7 +38,7 @@ It's a sample to exclude some static file log before split tag by domain.
 <source>
   type tail
   path /var/log/httpd/access_log
-  format /^(?<domain>[^ ]*) (?<host>[^ ]*) [^ ]* (?<user>[^ ]*) \[(?<time>[^\]]*)\] "(?<method>\S+)(?: +(?<path>[^ ]*) +\S*)?" (?<status>[^ ]*) (?<size>[^ ]*)(?: "(?<referer>[^\"]*)" "(?<agent>[^\"]*)" (?<response_time>[^ ]*))?$/
+  format apache2
   time_format %d/%b/%Y:%H:%M:%S %z
   tag td.apache.access
   pos_file /var/log/td-agent/apache_access.pos
