@@ -151,7 +151,7 @@ https://gist.github.com/matsumana/4078096
 - 稼働中のFluentdにflowcounter pluginを導入してみた  
 http://dayafterneet.blogspot.jp/2012/12/fluentdflowcounter-plugin.html
 
-- fluent-plugin-rewrite-tag-filter v1.2.0 をリリースしました。新機能を紹介します。 #fluentd
+- fluent-plugin-rewrite-tag-filter v1.2.0 をリリースしました。新機能を紹介します。 #fluentd  
 http://y-ken.hatenablog.com/entry/fluent-plugin-rewrite-tag-filter-v1.2.0
 
 ## TODO
