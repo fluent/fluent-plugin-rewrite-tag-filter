@@ -30,6 +30,13 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     remove_tag_prefix input
   ]
 
+  # hostname placeholder test
+  CONFIG4 = %[
+    rewriterule1 domain ^www\.google\.com$ ${hostname}
+    remove_tag_prefix input
+    hostname_command hostname -s
+  ]
+
   def create_driver(conf=CONFIG,tag='test')
     Fluent::Test::OutputTestDriver.new(Fluent::RewriteTagFilterOutput, tag).configure(conf)
   end
@@ -101,6 +108,17 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     assert_equal 1, emits.length
     p emits[0]
     assert_equal 'access', emits[0][0] # tag
+  end
+
+  def test_emit4
+    d1 = create_driver(CONFIG4, 'input.access')
+    d1.run do
+      d1.emit({'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
+    end
+    emits = d1.emits
+    assert_equal 1, emits.length
+    p emits[0]
+    assert_equal `hostname -s`.chomp, emits[0][0] # tag
   end
 end
 

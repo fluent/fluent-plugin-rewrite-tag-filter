@@ -9,13 +9,14 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
   end
   config_param :capitalize_regex_backreference, :bool, :default => false
   config_param :remove_tag_prefix, :string, :default => nil
+  config_param :hostname_command, :string, :default => 'hostname'
 
   def configure(conf)
     super
 
     @rewriterules = []
     rewriterule_names = []
-    @hostname = `hostname`.chomp
+    @hostname = `#{@hostname_command}`.chomp
 
     invalids = conf.keys.select{|k| k =~ /^rewriterule(\d+)$/}.select{|arg| arg =~ /^rewriterule(\d+)/ and not (1..PATTERN_MAX_NUM).include?($1.to_i)}
     if invalids.size > 0

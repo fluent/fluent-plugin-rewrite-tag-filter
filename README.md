@@ -126,6 +126,14 @@ It's a sample to rewrite a tag with placeholder.
 </match>
 ```
 
+# It will get "rewrited.ExampleMail.app30-124" when hostname is "app30-124.foo.com"
+<match apache.access>
+  type rewrite_tag_filter
+  rewriterule1  domain  ^(mail)\.(example)\.com$  rewrited.$2$1.${hostname}
+  hostname_command hostname -s
+</match>
+```
+
 ## Example
 
 - Example1: how to analyze response_time, response_code and user_agent for each virtual domain websites.  
