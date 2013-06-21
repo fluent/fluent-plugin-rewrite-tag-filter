@@ -28,6 +28,12 @@ rewruterule<num:1-200> <attribute> <regex_pattern> <new_tag>
 
 # Optional: Capitalize every matched regex backreference. (ex: $1, $2)
 capitalize_regex_backreference <yes/no> (default no)
+
+# Optional: remove tag prefix for tag placeholder.
+remove_tag_prefix <string>
+
+# Optional: set placeholder for hostname.
+hostname_command <string>
 ```
 
 ### Usage
@@ -124,7 +130,6 @@ It's a sample to rewrite a tag with placeholder.
   type rewrite_tag_filter
   rewriterule1  domain  ^(mail)\.(example)\.com$  rewrited.$2$1.${hostname}
 </match>
-```
 
 # It will get "rewrited.ExampleMail.app30-124" when hostname is "app30-124.foo.com"
 <match apache.access>
