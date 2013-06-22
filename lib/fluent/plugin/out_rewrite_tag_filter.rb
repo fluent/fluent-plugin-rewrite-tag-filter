@@ -28,7 +28,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
       if regexp.nil? || rewritetag.nil?
         raise Fluent::ConfigError, "missing values at rewriterule#{i} " + conf["rewriterule#{i}"].inspect
       end
-      @rewriterules.push([i, rewritekey, Regexp.new(trim_regex_quote(regexp)), is_exclude_regex(regexp), rewritetag])
+      @rewriterules.push([i, rewritekey, Regexp.new(trim_regex_quote(regexp)), get_match_operator(regexp), rewritetag])
       rewriterule_names.push(rewritekey + regexp)
       $log.info "adding rewrite_tag_filter rule: #{@rewriterules.last}"
     end
@@ -49,15 +49,16 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     placeholder = get_placeholder(tag)
     es.each do |time,record|
       rewrite = false
-      @rewriterules.each do |index, rewritekey, regexp, is_exclude_regex, rewritetag|
+      @rewriterules.each do |index, rewritekey, regexp, match_operator, rewritetag|
         rewritevalue = record[rewritekey].to_s
         next if rewritevalue.nil?
-        is_matched = regexp && regexp.match(rewritevalue)
-        next unless (is_matched && !is_exclude_regex) || (!is_matched && is_exclude_regex)
-        backreference_table = is_exclude_regex ? Hash.new : get_backreference_table($~.captures)
+        matched = regexp && regexp.match(rewritevalue)
+        exclude_mode = is_exclude_mode(match_operator)
+        next unless (matched && !exclude_mode) || (!matched && exclude_mode)
+        backreference_table = get_backreference_table($~.captures) unless exclude_mode
         rewrite = true
         rewritetag.gsub!(/(\${[a-z]+}|__[A-Z]+__)/, placeholder)
-        rewritetag.gsub!(/\$\d+/, backreference_table) unless is_exclude_regex
+        rewritetag.gsub!(/\$\d+/, backreference_table) unless exclude_mode
         tag = rewritetag
         break
       end
@@ -78,7 +79,12 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     return regexp
   end
 
-  def is_exclude_regex(regexp)
+  def get_match_operator(regexp)
+    return '!' if regexp.start_with?('!')
+    return ''
+  end
+
+  def is_exclude_mode(regexp)
     return regexp.start_with?('!')
   end
 
