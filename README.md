@@ -50,15 +50,17 @@ It's a sample to exclude some static file log before split tag by domain.
   pos_file /var/log/td-agent/apache_access.pos
 </source>
 
+# At rewriterule2, redirect to tag named "clear" which is not end with ".com"
 # At rewriterule4, "site.$2$1" to be "site.ExampleMail" by capitalize_regex_backreference option.
 <match td.apache.access>
   type rewrite_tag_filter
   capitalize_regex_backreference yes
   rewriterule1 path   \.(gif|jpe?g|png|pdf|zip)$  clear
-  rewriterule2 domain ^maps\.example\.com$        site.ExampleMaps
-  rewriterule3 domain ^news\.example\.com$        site.ExampleNews
-  rewriterule4 domain ^(mail)\.(example)\.com$    site.$2$1
-  rewriterule5 domain .+                          site.unmatched
+  rewriterule2 domain !^.+\.com$                  clear
+  rewriterule3 domain ^maps\.example\.com$        site.ExampleMaps
+  rewriterule4 domain ^news\.example\.com$        site.ExampleNews
+  rewriterule5 domain ^(mail)\.(example)\.com$    site.$2$1
+  rewriterule6 domain .+                          site.unmatched
 </match>
 
 <match site.*>

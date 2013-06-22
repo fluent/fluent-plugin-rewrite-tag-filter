@@ -28,7 +28,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
       if regexp.nil? || rewritetag.nil?
         raise Fluent::ConfigError, "missing values at rewriterule#{i} " + conf["rewriterule#{i}"].inspect
       end
-      @rewriterules.push([i, rewritekey, Regexp.new(trim_regex_quote(regexp)), rewritetag])
+      @rewriterules.push([i, rewritekey, Regexp.new(trim_regex_quote(regexp)), is_exclude_regex(regexp), rewritetag])
       rewriterule_names.push(rewritekey + regexp)
       $log.info "adding rewrite_tag_filter rule: #{@rewriterules.last}"
     end
@@ -49,14 +49,16 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     placeholder = get_placeholder(tag)
     es.each do |time,record|
       rewrite = false
-      @rewriterules.each do |index, rewritekey, regexp, rewritetag|
+      @rewriterules.each do |index, rewritekey, regexp, is_exclude_regex, rewritetag|
         rewritevalue = record[rewritekey].to_s
         next if rewritevalue.nil?
-        next unless (regexp && regexp.match(rewritevalue))
-        backreference_table = map_regex_table($~.captures)
+        is_matched = regexp && regexp.match(rewritevalue)
+        next unless (is_matched && !is_exclude_regex) || (!is_matched && is_exclude_regex)
+        backreference_table = is_exclude_regex ? Hash.new : get_backreference_table($~.captures)
         rewrite = true
         rewritetag.gsub!(/(\${[a-z]+}|__[A-Z]+__)/, placeholder)
-        tag = rewritetag.gsub(/\$\d+/, backreference_table)
+        rewritetag.gsub!(/\$\d+/, backreference_table) unless is_exclude_regex
+        tag = rewritetag
         break
       end
       Fluent::Engine.emit(tag, time, record) if (rewrite)
@@ -68,12 +70,19 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
   def trim_regex_quote(regexp)
     if regexp.start_with?('"') && regexp.end_with?('"')
       $log.info "rewrite_tag_filter: [DEPRECATED] Use ^....$ pattern for partial word match instead of double-quote-delimiter. #{regexp}"
-      return regexp[1..-2]
+      regexp = regexp[1..-2]
+    end
+    if regexp.start_with?('!')
+      regexp = regexp[1, regexp.length]
     end
     return regexp
   end
 
-  def map_regex_table(elements)
+  def is_exclude_regex(regexp)
+    return regexp.start_with?('!')
+  end
+
+  def get_backreference_table(elements)
     hash_table = Hash.new
     elements.each.with_index(1) do |value, index|
       hash_table["$#{index}"] = @capitalize_regex_backreference ? value.capitalize : value

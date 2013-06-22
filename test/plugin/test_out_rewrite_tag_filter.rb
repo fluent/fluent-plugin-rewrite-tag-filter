@@ -37,6 +37,12 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     hostname_command hostname -s
   ]
 
+  # '!' character (exclamation mark) to specify a non-matching pattern
+  CONFIG_NON_MATCHING = %[
+    rewriterule1 domain !^www\..+$ not_start_with_www
+    rewriterule2 domain ^www\..+$ start_with_www
+  ]
+
   def create_driver(conf=CONFIG,tag='test')
     Fluent::Test::OutputTestDriver.new(Fluent::RewriteTagFilterOutput, tag).configure(conf)
   end
@@ -120,5 +126,20 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     p emits[0]
     assert_equal `hostname -s`.chomp, emits[0][0] # tag
   end
+
+  def test_emit_non_matching
+    d1 = create_driver(CONFIG_NON_MATCHING, 'input.access')
+    d1.run do
+      d1.emit({'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
+      d1.emit({'domain' => 'maps.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
+    end
+    emits = d1.emits
+    assert_equal 2, emits.length
+    p emits[0]
+    assert_equal 'start_with_www', emits[0][0] # tag
+    p emits[1]
+    assert_equal 'not_start_with_www', emits[1][0] # tag
+  end
+
 end
 
