@@ -24,15 +24,15 @@ gem install fluent-plugin-rewrite-tag-filter
 ### Syntax
 
 ```
-rewruterule<num:1-200> <attribute> <regex_pattern> <new_tag>
+rewriterule<num:1-200> <attribute> <regex_pattern> <new_tag>
 
 # Optional: Capitalize every matched regex backreference. (ex: $1, $2)
 capitalize_regex_backreference <yes/no> (default no)
 
-# Optional: remove tag prefix for tag placeholder.
+# Optional: remove tag prefix for tag placeholder. (see the section of "Tag placeholder")
 remove_tag_prefix <string>
 
-# Optional: set placeholder for hostname.
+# Optional: override hostname command for placeholder. (see the section of "Tag placeholder")
 hostname_command <string>
 ```
 
@@ -108,14 +108,25 @@ $ tailf /var/log/td-agent/td-agent.log
 
 ### Tag placeholder
 
-Supporing these placeholder for new_tag(rewrited tag).  
-It's available to use this placeholder with `remove_tag_prefix` option.  
-This feature adds removing tag prefix for `${tag}` or `__TAG__` in placeholder.
+It is supporting there placeholder for new_tag(rewrited tag).
 
-- `${hostname}`
-- `__HOSTNAME__`
 - `${tag}`
 - `__TAG__`
+- `${hostname}`
+- `__HOSTNAME__`
+
+#### `${tag}`, `__TAG__`
+
+It's available to use this placeholder with `remove_tag_prefix` option.  
+This option adds removing tag prefix for `${tag}` or `__TAG__` in placeholder.
+
+#### `${hostname}`, `__HOSTNAME__`
+
+By default, execute command as `hostname` to get full hostname.  
+Also, you can override hostname command using `hostname_command` option.  
+It comes short hostname with `hostname_command hostname -s` configuration specified.
+
+#### Placeholder Usage
 
 It's a sample to rewrite a tag with placeholder.
 
