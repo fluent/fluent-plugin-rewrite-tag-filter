@@ -81,12 +81,6 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
 
   def get_match_operator(regexp)
     return '!' if regexp.start_with?('!')
-    #TODO ref. http://httpd.apache.org/docs/trunk/mod/mod_rewrite.html
-    #return '=' if regexp.start_with?('=')
-    #return '<' if regexp.start_with?('<')
-    #return '<=' if regexp.start_with?('<=')
-    #return '>' if regexp.start_with?('>')
-    #return '>=' if regexp.start_with?('>=')
     return ''
   end
 
