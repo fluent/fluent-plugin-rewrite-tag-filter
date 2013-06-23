@@ -115,12 +115,12 @@ It is supporting there placeholder for new_tag(rewrited tag).
 - `${hostname}`
 - `__HOSTNAME__`
 
-#### `${tag}`, `__TAG__`
+#### tag placeholder
 
 It's available to use this placeholder with `remove_tag_prefix` option.  
 This option adds removing tag prefix for `${tag}` or `__TAG__` in placeholder.
 
-#### `${hostname}`, `__HOSTNAME__`
+#### hostname placeholder
 
 By default, execute command as `hostname` to get full hostname.  
 Also, you can override hostname command using `hostname_command` option.  
