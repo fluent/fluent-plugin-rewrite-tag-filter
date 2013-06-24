@@ -34,7 +34,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     end
     rewriterule_index_list = conf.keys.select{|s| s =~ /^rewriterule\d+$/}.map{|v| (/^rewriterule(\d+)$/.match(v))[1].to_i}
     unless rewriterule_index_list.reduce(true){|v,i| v and @rewriterules[i - 1]}
-      raise Fluent::ConfigError, "jump of rewriterule index found #{@rewriterules.inspect}"
+      $log.warn "jump of rewriterule index found #{@rewriterules.inspect}"
     end
     unless @rewriterules.length == rewriterule_names.uniq.length
       raise Fluent::ConfigError, "duplicated rewriterules found #{@rewriterules.inspect}"
