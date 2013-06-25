@@ -136,15 +136,18 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
   def test_emit5_non_matching
     d1 = create_driver(CONFIG_NON_MATCHING, 'input.access')
     d1.run do
-      d1.emit({'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
-      d1.emit({'domain' => 'maps.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
+      d1.emit({'domain' => 'www.google.com'})
+      d1.emit({'path' => '/'})
+      d1.emit({'domain' => 'maps.google.com'})
     end
     emits = d1.emits
-    assert_equal 2, emits.length
+    assert_equal 3, emits.length
     p emits[0]
     assert_equal 'start_with_www', emits[0][0] # tag
     p emits[1]
     assert_equal 'not_start_with_www', emits[1][0] # tag
+    p emits[2]
+    assert_equal 'not_start_with_www', emits[2][0] # tag
   end
 
   def test_emit6_jump_index
