@@ -51,7 +51,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
       rewrite = false
       @rewriterules.each do |index, rewritekey, regexp, match_operator, rewritetag|
         rewritevalue = record[rewritekey].to_s
-        next if rewritevalue.nil?
+        next if rewritevalue.empty? && !match_operator.start_with?('!')
         matched = regexp && regexp.match(rewritevalue)
         exclude_mode = is_exclude_mode(match_operator)
         next unless (matched && !exclude_mode) || (!matched && exclude_mode)
