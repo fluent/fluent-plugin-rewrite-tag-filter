@@ -16,7 +16,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     conf.keys.select{|k| k =~ /^rewriterule(\d+)$/}.sort_by{|i| i.sub('rewriterule', '').to_i}.each do |key|
       rewritekey,regexp,rewritetag = parse_rewriterule(conf[key])
       if regexp.nil? || rewritetag.nil?
-        raise Fluent::ConfigError, "missing values at #{key} " + conf[key]
+        raise Fluent::ConfigError, "failed to parse rewriterules at #{key} #{conf[key]}"
       end
       @rewriterules.push([rewritekey, Regexp.new(trim_regex_quote(regexp)), get_match_operator(regexp), rewritetag])
       rewriterule_names.push(rewritekey + regexp)
@@ -24,7 +24,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     end
 
     unless @rewriterules.length > 0
-      raise Fluent::ConfigError, "missing rewriterules #{@rewriterules.inspect}"
+      raise Fluent::ConfigError, "missing rewriterules"
     end
 
     unless @rewriterules.length == rewriterule_names.uniq.length
