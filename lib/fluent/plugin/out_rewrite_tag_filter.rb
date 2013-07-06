@@ -14,14 +14,13 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     @hostname = `#{@hostname_command}`.chomp
 
     conf.keys.select{|k| k =~ /^rewriterule(\d+)$/}.sort_by{|i| i.sub('rewriterule', '').to_i}.each do |key|
-      index = key.match(/^rewriterule(\d+)$/).captures.first.to_i
       rewritekey,regexp,rewritetag = parse_rewriterule(conf[key])
       if regexp.nil? || rewritetag.nil?
         raise Fluent::ConfigError, "missing values at #{key} " + conf[key]
       end
-      @rewriterules.push([index, rewritekey, Regexp.new(trim_regex_quote(regexp)), get_match_operator(regexp), rewritetag])
+      @rewriterules.push([rewritekey, Regexp.new(trim_regex_quote(regexp)), get_match_operator(regexp), rewritetag])
       rewriterule_names.push(rewritekey + regexp)
-      $log.info "adding rewrite_tag_filter rule: #{@rewriterules.last}"
+      $log.info "adding rewrite_tag_filter rule: #{key} #{@rewriterules.last}"
     end
 
     unless @rewriterules.length > 0
@@ -41,7 +40,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     placeholder = get_placeholder(tag)
     es.each do |time,record|
       rewrite = false
-      @rewriterules.each do |index, rewritekey, regexp, match_operator, rewritetag|
+      @rewriterules.each do |rewritekey, regexp, match_operator, rewritetag|
         rewritevalue = record[rewritekey].to_s
         next if rewritevalue.empty? && !match_operator.start_with?('!')
         matched = regexp && regexp.match(rewritevalue)
