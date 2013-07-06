@@ -45,7 +45,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
 
   # jump of index
   CONFIG_JUMP_INDEX = %[
-    rewriterule1 domain ^www\.google\.com$ site.Google
+    rewriterule10 domain ^www\.google\.com$ site.Google
     rewriterule20 domain ^news\.google\.com$ site.GoogleNews
   ]
 
@@ -57,13 +57,19 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     assert_raise(Fluent::ConfigError) {
       d = create_driver('')
     }
+    assert_raise(Fluent::ConfigError) {
+      d = create_driver('rewriterule1 foo')
+    }
+    assert_raise(Fluent::ConfigError) {
+      d = create_driver('rewriterule1 foo foo')
+    }
     d = create_driver %[
       rewriterule1 domain ^www.google.com$ site.Google
       rewriterule2 domain ^news.google.com$ site.GoogleNews
     ]
-    d.instance.inspect
-    assert_equal 'domain ^www.google.com$ site.Google', d.instance.rewriterule1
-    assert_equal 'domain ^news.google.com$ site.GoogleNews', d.instance.rewriterule2
+    puts d.instance.inspect
+    assert_equal 'domain ^www.google.com$ site.Google', d.instance.config['rewriterule1']
+    assert_equal 'domain ^news.google.com$ site.GoogleNews', d.instance.config['rewriterule2']
   end
 
   def test_emit

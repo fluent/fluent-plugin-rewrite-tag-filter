@@ -1,12 +1,7 @@
 class Fluent::RewriteTagFilterOutput < Fluent::Output
   Fluent::Plugin.register_output('rewrite_tag_filter', self)
 
-  PATTERN_MAX_NUM = 200
-
-  config_param :rewriterule1, :string # string: NAME REGEXP
-  (2..PATTERN_MAX_NUM).each do |i|
-    config_param ('rewriterule' + i.to_s).to_sym, :string, :default => nil # NAME REGEXP
-  end
+  config_param :rewriterule1, :string, :default => nil
   config_param :capitalize_regex_backreference, :bool, :default => false
   config_param :remove_tag_prefix, :string, :default => nil
   config_param :hostname_command, :string, :default => 'hostname'
@@ -18,24 +13,21 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     rewriterule_names = []
     @hostname = `#{@hostname_command}`.chomp
 
-    invalids = conf.keys.select{|k| k =~ /^rewriterule(\d+)$/}.select{|arg| arg =~ /^rewriterule(\d+)/ and not (1..PATTERN_MAX_NUM).include?($1.to_i)}
-    if invalids.size > 0
-      $log.warn "invalid number rewriterules (valid rewriterule number:1-{PATTERN_MAX_NUM}): #{invalids.join(",")}"
-    end
-    (1..PATTERN_MAX_NUM).each do |i|
-      next unless conf["rewriterule#{i}"]
-      rewritekey,regexp,rewritetag = conf["rewriterule#{i}"].match(/^([^\s]+)\s+(.+?)\s+([^\s]+)$/).captures
+    conf.keys.select{|k| k =~ /^rewriterule(\d+)$/}.sort_by{|i| i.sub('rewriterule', '').to_i}.each do |key|
+      index = key.match(/^rewriterule(\d+)$/).captures.first.to_i
+      rewritekey,regexp,rewritetag = parse_rewriterule(conf[key])
       if regexp.nil? || rewritetag.nil?
-        raise Fluent::ConfigError, "missing values at rewriterule#{i} " + conf["rewriterule#{i}"].inspect
+        raise Fluent::ConfigError, "missing values at #{key} " + conf[key]
       end
-      @rewriterules.push([i, rewritekey, Regexp.new(trim_regex_quote(regexp)), get_match_operator(regexp), rewritetag])
+      @rewriterules.push([index, rewritekey, Regexp.new(trim_regex_quote(regexp)), get_match_operator(regexp), rewritetag])
       rewriterule_names.push(rewritekey + regexp)
       $log.info "adding rewrite_tag_filter rule: #{@rewriterules.last}"
     end
-    rewriterule_index_list = conf.keys.select{|s| s =~ /^rewriterule\d+$/}.map{|v| (/^rewriterule(\d+)$/.match(v))[1].to_i}
-    unless rewriterule_index_list.reduce(true){|v,i| v and @rewriterules[i - 1]}
-      $log.warn "jump of rewriterule index found #{@rewriterules.inspect}"
+
+    unless @rewriterules.length > 0
+      raise Fluent::ConfigError, "missing rewriterules #{@rewriterules.inspect}"
     end
+
     unless @rewriterules.length == rewriterule_names.uniq.length
       raise Fluent::ConfigError, "duplicated rewriterules found #{@rewriterules.inspect}"
     end
@@ -66,6 +58,12 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     end
 
     chain.next
+  end
+
+  def parse_rewriterule(rule)
+    if rule.match(/^([^\s]+)\s+(.+?)\s+([^\s]+)$/)
+      return $~.captures
+    end
   end
 
   def trim_regex_quote(regexp)
