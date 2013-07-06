@@ -80,6 +80,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       d1.emit({'domain' => 'map.google.com', 'path' => '/', 'agent' => 'Macintosh; Intel Mac OS X 10_7_4', 'response_time' => 900000})
       d1.emit({'domain' => 'labs.google.com', 'path' => '/', 'agent' => 'Mozilla/5.0 Googlebot-FooBar/2.1', 'response_time' => 900000})
       d1.emit({'domain' => 'tagtest.google.com', 'path' => '/', 'agent' => 'Googlebot', 'response_time' => 900000})
+      d1.emit({'domain' => 'noop.example.com'}) # to be ignored
     end
     emits = d1.emits
     assert_equal 5, emits.length

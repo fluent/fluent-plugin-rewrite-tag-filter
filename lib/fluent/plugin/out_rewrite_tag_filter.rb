@@ -6,6 +6,8 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
   config_param :remove_tag_prefix, :string, :default => nil
   config_param :hostname_command, :string, :default => 'hostname'
 
+  MATCH_OPERATOR_EXCLUDE = '!'
+
   def configure(conf)
     super
 
@@ -37,26 +39,34 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
   end
 
   def emit(tag, es, chain)
-    placeholder = get_placeholder(tag)
     es.each do |time,record|
-      rewrite = false
-      @rewriterules.each do |rewritekey, regexp, match_operator, rewritetag|
-        rewritevalue = record[rewritekey].to_s
-        next if rewritevalue.empty? && !match_operator.start_with?('!')
-        matched = regexp && regexp.match(rewritevalue)
-        exclude_mode = is_exclude_mode(match_operator)
-        next unless (matched && !exclude_mode) || (!matched && exclude_mode)
-        backreference_table = get_backreference_table($~.captures) unless exclude_mode
-        rewrite = true
-        rewritetag.gsub!(/(\${[a-z]+}|__[A-Z]+__)/, placeholder)
-        rewritetag.gsub!(/\$\d+/, backreference_table) unless exclude_mode
-        tag = rewritetag
-        break
-      end
-      Fluent::Engine.emit(tag, time, record) if (rewrite)
+      rewrited_tag = rewrite_tag(tag, record)
+      next if rewrited_tag.nil? || tag == rewrited_tag
+      Fluent::Engine.emit(rewrited_tag, time, record)
     end
 
     chain.next
+  end
+
+  def rewrite_tag(tag, record)
+    placeholder = get_placeholder(tag)
+    @rewriterules.each do |rewritekey, regexp, match_operator, rewritetag|
+      rewritevalue = record[rewritekey].to_s
+      next if rewritevalue.empty? && match_operator != MATCH_OPERATOR_EXCLUDE
+      matched = regexp && regexp.match(rewritevalue)
+      case match_operator
+      when MATCH_OPERATOR_EXCLUDE
+        next if matched
+      else
+        next if rewritevalue.empty?
+        next if !matched
+        backreference_table = get_backreference_table($~.captures)
+        rewritetag.gsub!(/\$\d+/, backreference_table)
+      end
+      rewritetag.gsub!(/(\${[a-z]+}|__[A-Z]+__)/, placeholder)
+      return rewritetag
+    end
+    return nil
   end
 
   def parse_rewriterule(rule)
@@ -79,10 +89,6 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
   def get_match_operator(regexp)
     return '!' if regexp.start_with?('!')
     return ''
-  end
-
-  def is_exclude_mode(regexp)
-    return regexp.start_with?('!')
   end
 
   def get_backreference_table(elements)
