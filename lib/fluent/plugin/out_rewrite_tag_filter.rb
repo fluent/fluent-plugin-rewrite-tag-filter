@@ -58,7 +58,6 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
       when MATCH_OPERATOR_EXCLUDE
         next if matched
       else
-        next if rewritevalue.empty?
         next if !matched
         backreference_table = get_backreference_table($~.captures)
         rewritetag.gsub!(/\$\d+/, backreference_table)
