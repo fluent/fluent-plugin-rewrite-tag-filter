@@ -1,7 +1,6 @@
 class Fluent::RewriteTagFilterOutput < Fluent::Output
   Fluent::Plugin.register_output('rewrite_tag_filter', self)
 
-  config_param :rewriterule1, :string, :default => nil
   config_param :capitalize_regex_backreference, :bool, :default => false
   config_param :remove_tag_prefix, :string, :default => nil
   config_param :hostname_command, :string, :default => 'hostname'
