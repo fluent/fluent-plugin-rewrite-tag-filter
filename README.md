@@ -5,7 +5,7 @@
 ### RewriteTagFilterOutput
 
 Fluentd Output filter plugin. It has designed to rewrite tag like mod_rewrite.  
-Re-emmit a record with rewrited tag when a value matches with the regular expression.  
+Re-emmit a record with rewrited tag when a value matches/unmatches with the regular expression.  
 Also you can change a tag from apache log by domain, status-code(ex. 500 error),  
 user-agent, request-uri, regex-backreference and so on with regular expression.
 
@@ -50,17 +50,19 @@ It's a sample to exclude some static file log before split tag by domain.
   pos_file /var/log/td-agent/apache_access.pos
 </source>
 
-# At rewriterule2, redirect to tag named "clear" which is not end with ".com"
-# At rewriterule4, "site.$2$1" to be "site.ExampleMail" by capitalize_regex_backreference option.
+# At rewriterule2, redirect to tag named "clear" which unmatched for status code 200.
+# At rewriterule3, redirect to tag named "clear" which is not end with ".com"
+# At rewriterule6, "site.$2$1" to be "site.ExampleMail" by capitalize_regex_backreference option.
 <match td.apache.access>
   type rewrite_tag_filter
   capitalize_regex_backreference yes
   rewriterule1 path   \.(gif|jpe?g|png|pdf|zip)$  clear
-  rewriterule2 domain !^.+\.com$                  clear
-  rewriterule3 domain ^maps\.example\.com$        site.ExampleMaps
-  rewriterule4 domain ^news\.example\.com$        site.ExampleNews
-  rewriterule5 domain ^(mail)\.(example)\.com$    site.$2$1
-  rewriterule6 domain .+                          site.unmatched
+  rewriterule2 status !^200$                      clear
+  rewriterule3 domain !^.+\.com$                  clear
+  rewriterule4 domain ^maps\.example\.com$        site.ExampleMaps
+  rewriterule5 domain ^news\.example\.com$        site.ExampleNews
+  rewriterule6 domain ^(mail)\.(example)\.com$    site.$2$1
+  rewriterule7 domain .+                          site.unmatched
 </match>
 
 <match site.*>
