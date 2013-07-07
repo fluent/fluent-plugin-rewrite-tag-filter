@@ -24,7 +24,7 @@ gem install fluent-plugin-rewrite-tag-filter
 ### Syntax
 
 ```
-rewriterule<num:1-200> <attribute> <regex_pattern> <new_tag>
+rewriterule<num> <attribute> <regex_pattern> <new_tag>
 
 # Optional: Capitalize every matched regex backreference. (ex: $1, $2)
 capitalize_regex_backreference <yes/no> (default no)
