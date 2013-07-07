@@ -16,7 +16,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
   # aggresive test
   # indentation, comment, capitalize_regex_backreference, regex with space aside.
   # [DEPLICATED] Use ^....$ pattern for partial word match instead of double-quote-delimiter.
-  CONFIG2 = %[
+  CONFIG_INDENT_SPACE_AND_CAPITALIZE_OPTION = %[
     capitalize_regex_backreference yes
     rewriterule1 domain ^www\.google\.com$                  site.Google # some comment
     rewriterule2 domain ^(news)\.(google)\.com$             site.$2$1
@@ -97,8 +97,8 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     assert_equal 'site.input.access.tagtest', emits[4][0] #tag
   end
 
-  def test_emit2
-    d1 = create_driver(CONFIG2, 'input.access')
+  def test_emit2_indent_and_capitalize_option
+    d1 = create_driver(CONFIG_INDENT_SPACE_AND_CAPITALIZE_OPTION, 'input.access')
     d1.run do
       d1.emit({'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
       d1.emit({'domain' => 'news.google.com', 'path' => '/', 'agent' => 'Googlebot-Mobile', 'response_time' => 900000})
