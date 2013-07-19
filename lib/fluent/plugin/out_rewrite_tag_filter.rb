@@ -59,9 +59,9 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
       else
         next if !matched
         backreference_table = get_backreference_table($~.captures)
-        rewritetag.gsub!(/\$\d+/, backreference_table)
+        rewritetag = rewritetag.gsub(/\$\d+/, backreference_table)
       end
-      rewritetag.gsub!(/(\${[a-z]+}|__[A-Z]+__)/, placeholder)
+      rewritetag = rewritetag.gsub(/(\${[a-z]+}|__[A-Z]+__)/, placeholder)
       return rewritetag
     end
     return nil
