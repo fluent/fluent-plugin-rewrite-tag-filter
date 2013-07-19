@@ -30,6 +30,12 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     remove_tag_prefix input
   ]
 
+  # remove_tag_prefix test2
+  CONFIG_REMOVE_TAG_PREFIX_WITH_DOT = %[
+    rewriterule1 domain ^www\.google\.com$ ${tag}
+    remove_tag_prefix input.
+  ]
+
   # hostname placeholder test
   CONFIG_SHORT_HOSTNAME = %[
     rewriterule1 domain ^www\.google\.com$ ${hostname}
@@ -129,7 +135,18 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     assert_equal 'access', emits[0][0] # tag
   end
 
-  def test_emit4_short_hostname
+  def test_emit4_remove_tag_prefix_with_dot
+    d1 = create_driver(CONFIG_REMOVE_TAG_PREFIX_WITH_DOT, 'input.access')
+    d1.run do
+      d1.emit({'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
+    end
+    emits = d1.emits
+    assert_equal 1, emits.length
+    p emits[0]
+    assert_equal 'access', emits[0][0] # tag
+  end
+
+  def test_emit5_short_hostname
     d1 = create_driver(CONFIG_SHORT_HOSTNAME, 'input.access')
     d1.run do
       d1.emit({'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
@@ -140,7 +157,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     assert_equal `hostname -s`.chomp, emits[0][0] # tag
   end
 
-  def test_emit5_non_matching
+  def test_emit6_non_matching
     d1 = create_driver(CONFIG_NON_MATCHING, 'input.access')
     d1.run do
       d1.emit({'domain' => 'www.google.com'})
@@ -157,7 +174,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     assert_equal 'not_start_with_www', emits[2][0] # tag
   end
 
-  def test_emit6_jump_index
+  def test_emit7_jump_index
     d1 = create_driver(CONFIG_JUMP_INDEX, 'input.access')
     d1.run do
       d1.emit({'domain' => 'www.google.com', 'path' => '/', 'agent' => 'Googlebot', 'response_time' => 1000000})
