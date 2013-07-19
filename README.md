@@ -188,6 +188,8 @@ http://y-ken.hatenablog.com/entry/fluent-plugin-rewrite-tag-filter-v1.3.0
 
 ## TODO
 
+* support geoip placholder like `${geoip.city}` with `geoip_lookup_key host` configuration.
+
 Pull requests are very welcome!!
 
 ## Copyright
