@@ -78,14 +78,14 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
       $log.info "rewrite_tag_filter: [DEPRECATED] Use ^....$ pattern for partial word match instead of double-quote-delimiter. #{regexp}"
       regexp = regexp[1..-2]
     end
-    if regexp.start_with?('!')
+    if regexp.start_with?(MATCH_OPERATOR_EXCLUDE)
       regexp = regexp[1, regexp.length]
     end
     return regexp
   end
 
   def get_match_operator(regexp)
-    return '!' if regexp.start_with?('!')
+    return MATCH_OPERATOR_EXCLUDE if regexp.start_with?(MATCH_OPERATOR_EXCLUDE)
     return ''
   end
 
