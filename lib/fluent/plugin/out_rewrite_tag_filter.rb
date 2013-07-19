@@ -19,7 +19,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
       if regexp.nil? || rewritetag.nil?
         raise Fluent::ConfigError, "failed to parse rewriterules at #{key} #{conf[key]}"
       end
-      @rewriterules.push([rewritekey, Regexp.new(trim_regex_quote(regexp)), get_match_operator(regexp), rewritetag])
+      @rewriterules.push([rewritekey, /#{trim_regex_quote(regexp)}/, get_match_operator(regexp), rewritetag])
       rewriterule_names.push(rewritekey + regexp)
       $log.info "adding rewrite_tag_filter rule: #{key} #{@rewriterules.last}"
     end
@@ -33,7 +33,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     end
 
     unless @remove_tag_prefix.nil?
-      @remove_tag_prefix = Regexp.new("^#{Regexp.escape(@remove_tag_prefix)}\\.?")
+      @remove_tag_prefix = /^#{Regexp.escape(@remove_tag_prefix)}\.?/
     end
   end
 
