@@ -11,13 +11,13 @@ user-agent, request-uri, regex-backreference and so on with regular expression.
 
 ## Installation
 
-```
-# native gem
-gem install fluent-plugin-rewrite-tag-filter
+install with gem or fluent-gem command as:
 
-# td-agent gem
-/usr/lib64/fluent/ruby/bin/fluent-gem install fluent-plugin-rewrite-tag-filter
-```
+# for fluentd
+$ gem install fluent-plugin-rewrite-tag-filter
+
+# for td-agent
+$ sudo /usr/lib64/fluent/ruby/bin/fluent-gem install fluent-plugin-rewrite-tag-filter
 
 ## Configuration
 
@@ -185,6 +185,8 @@ http://y-ken.hatenablog.com/entry/fluent-plugin-rewrite-tag-filter-v1.2.1
 - 待望の正規表現の否定パターンに対応した fluent-plugin-rewrite-tag-filter v1.3.0 をリリースしました #fluentd  
 http://y-ken.hatenablog.com/entry/fluent-plugin-rewrite-tag-filter-v1.3.0
 
+- 不具合修正版 fluent-plugin-rewrite-tag-filter v1.3.1 をリリースしました #fluentd  
+http://y-ken.hatenablog.com/entry/fluent-plugin-rewrite-tag-filter-v1.3.1
 
 ## TODO
 
