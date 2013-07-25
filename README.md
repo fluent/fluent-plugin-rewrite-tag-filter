@@ -13,11 +13,13 @@ user-agent, request-uri, regex-backreference and so on with regular expression.
 
 install with gem or fluent-gem command as:
 
+```
 # for fluentd
 $ gem install fluent-plugin-rewrite-tag-filter
 
 # for td-agent
 $ sudo /usr/lib64/fluent/ruby/bin/fluent-gem install fluent-plugin-rewrite-tag-filter
+```
 
 ## Configuration
 
