@@ -191,6 +191,9 @@ http://y-ken.hatenablog.com/entry/fluent-plugin-rewrite-tag-filter-v1.3.0
 - 不具合修正版 fluent-plugin-rewrite-tag-filter v1.3.1 をリリースしました #fluentd  
 http://y-ken.hatenablog.com/entry/fluent-plugin-rewrite-tag-filter-v1.3.1
 
+- PostgreSQLのログをfluentdで回収する設定 — still deeper  
+http://chopl.in/blog/2013/06/07/postgresql_csv_log_with_fluentd.html
+
 ## TODO
 
 Pull requests are very welcome!!
