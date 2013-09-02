@@ -28,7 +28,8 @@ $ sudo /usr/lib64/fluent/ruby/bin/fluent-gem install fluent-plugin-rewrite-tag-f
 ```
 rewriterule<num> <attribute> <regex_pattern> <new_tag>
 
-# Optional: Capitalize every matched regex backreference. (ex: $1, $2)
+# Optional: Capitalize letter for every matched regex backreference. (ex: maps -> Maps)
+# for more details, see usage.
 capitalize_regex_backreference <yes/no> (default no)
 
 # Optional: remove tag prefix for tag placeholder. (see the section of "Tag placeholder")
@@ -52,7 +53,7 @@ It's a sample to exclude some static file log before split tag by domain.
   pos_file /var/log/td-agent/apache_access.pos
 </source>
 
-# "capitalize_regex_backreference yes" means converting first letter to upper case. ex: maps -> Maps
+# "capitalize_regex_backreference yes" affects converting every matched first letter of backreference to upper case. ex: maps -> Maps
 # At rewriterule2, redirect to tag named "clear" which unmatched for status code 200.
 # At rewriterule3, redirect to tag named "clear" which is not end with ".com"
 # At rewriterule6, "site.$2$1" to be "site.ExampleMail" by capitalize_regex_backreference option.
