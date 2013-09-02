@@ -194,6 +194,9 @@ http://y-ken.hatenablog.com/entry/fluent-plugin-rewrite-tag-filter-v1.3.1
 - PostgreSQLのログをfluentdで回収する設定 — still deeper  
 http://chopl.in/blog/2013/06/07/postgresql_csv_log_with_fluentd.html
 
+- S3とFluentdを用いた効率的なログ管理 | SmartNews開発者ブログ  
+http://developer.smartnews.be/blog/2013/09/02/an-effective-log-management-technique-which-uses-fluentd-and-s3/
+
 ## TODO
 
 Pull requests are very welcome!!
