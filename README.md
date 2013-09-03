@@ -1,4 +1,4 @@
-# fluent-plugin-rewrite-tag-filter
+# fluent-plugin-rewrite-tag-filter [![Build Status](https://travis-ci.org/y-ken/fluent-plugin-rewrite-tag-filter.png?branch=master)](https://travis-ci.org/y-ken/fluent-plugin-rewrite-tag-filter)
 
 ## Overview
 
