@@ -56,8 +56,8 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
   ]
 
   CONFIG_USE_OF_FIRST_MATCH_TAG = %[
-    use_of_first_match_tag \w+\.(\w+)\.
-    rewriterule1 type ^(\w+)$ ${tag}
+    use_of_first_match_tag [a-z_]+\.([a-z_]+)\.
+    rewriterule1 type ^[a-z_]+$ api.${tag}.warrior
   ]
 
   def create_driver(conf=CONFIG,tag='test')
@@ -201,7 +201,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     emits = d1.emits
     p emits[0]
     assert_equal 1, emits.length
-    assert_equal 'production', emits[0][0] # tag
+    assert_equal 'api.production.warrior', emits[0][0] # tag
   end
 
 end
