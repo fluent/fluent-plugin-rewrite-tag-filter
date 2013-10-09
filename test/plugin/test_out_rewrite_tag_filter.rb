@@ -194,7 +194,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
   end
 
   def test_emit8_first_match_tag
-    d1 = create_driver(CONFIG_USE_OF_FIRST_MATCH_TAG, 'hoge_game.production.api')
+    d1 = create_driver(CONFIG_USE_OF_FIRST_MATCH_TAG, 'hoge_application.production.api')
     d1.run do
       d1.emit({'user_id' => '1000', 'type' => 'warrior', 'name' => 'Richard Costner'})
     end
@@ -202,6 +202,16 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     p emits[0]
     assert_equal 1, emits.length
     assert_equal 'api.production.warrior', emits[0][0] # tag
+
+    d2 = create_driver(CONFIG_USE_OF_FIRST_MATCH_TAG, 'hoge_application.development.api')
+    d2.run do
+      d2.emit({'user_id' => '1000', 'type' => 'warrior', 'name' => 'Mason Smith'})
+    end
+    emits = d2.emits
+    p emits[0]
+    assert_equal 1, emits.length
+    assert_equal 'api.development.warrior', emits[0][0]
+
   end
 
 end
