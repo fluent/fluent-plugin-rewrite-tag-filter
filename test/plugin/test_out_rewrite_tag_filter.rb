@@ -55,6 +55,11 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     rewriterule20 domain ^news\.google\.com$ site.GoogleNews
   ]
 
+  CONFIG_USE_OF_FIRST_MATCH_TAG = %[
+    use_of_first_match_tag \w+\.(\w+)\.
+    rewriterule1 type ^(\w+)$ ${tag}
+  ]
+
   def create_driver(conf=CONFIG,tag='test')
     Fluent::Test::OutputTestDriver.new(Fluent::RewriteTagFilterOutput, tag).configure(conf)
   end
@@ -186,6 +191,17 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     assert_equal 'site.Google', emits[0][0] # tag
     p emits[1]
     assert_equal 'site.GoogleNews', emits[1][0] # tag
+  end
+
+  def test_emit8_first_match_tag
+    d1 = create_driver(CONFIG_USE_OF_FIRST_MATCH_TAG, 'hoge_game.production.api')
+    d1.run do
+      d1.emit({'user_id' => '1000', 'type' => 'warrior', 'name' => 'Richard Costner'})
+    end
+    emits = d1.emits
+    p emits[0]
+    assert_equal 1, emits.length
+    assert_equal 'production', emits[0][0] # tag
   end
 
 end
