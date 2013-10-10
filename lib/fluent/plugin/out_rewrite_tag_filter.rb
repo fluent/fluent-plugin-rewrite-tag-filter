@@ -3,6 +3,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
 
   config_param :capitalize_regex_backreference, :bool, :default => false
   config_param :remove_tag_prefix, :string, :default => nil
+  config_param :use_of_first_match_tag_regexp, :string, :default => nil
   config_param :hostname_command, :string, :default => 'hostname'
 
   MATCH_OPERATOR_EXCLUDE = '!'
@@ -34,6 +35,10 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
 
     unless @remove_tag_prefix.nil?
       @remove_tag_prefix = /^#{Regexp.escape(@remove_tag_prefix)}\.?/
+    end
+
+    unless @use_of_first_match_tag_regexp.nil?
+      @use_of_first_match_tag_regexp = Regexp.new(@use_of_first_match_tag_regexp)
     end
   end
 
@@ -99,6 +104,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
 
   def get_placeholder(tag)
     tag = tag.sub(@remove_tag_prefix, '') if @remove_tag_prefix
+    tag = tag.match(@use_of_first_match_tag_regexp)[1] if @use_of_first_match_tag_regexp
     return {
       '__HOSTNAME__' => @hostname,
       '${hostname}' => @hostname,

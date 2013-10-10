@@ -55,6 +55,11 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     rewriterule20 domain ^news\.google\.com$ site.GoogleNews
   ]
 
+  CONFIG_USE_OF_FIRST_MATCH_TAG_REGEXP = %[
+    use_of_first_match_tag_regexp [a-z_]+\.([a-z_]+)\.
+    rewriterule1 type ^[a-z_]+$ api.${tag}.warrior
+  ]
+
   def create_driver(conf=CONFIG,tag='test')
     Fluent::Test::OutputTestDriver.new(Fluent::RewriteTagFilterOutput, tag).configure(conf)
   end
@@ -186,6 +191,27 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     assert_equal 'site.Google', emits[0][0] # tag
     p emits[1]
     assert_equal 'site.GoogleNews', emits[1][0] # tag
+  end
+
+  def test_emit8_first_match_tag
+    d1 = create_driver(CONFIG_USE_OF_FIRST_MATCH_TAG_REGEXP, 'hoge_application.production.api')
+    d1.run do
+      d1.emit({'user_id' => '1000', 'type' => 'warrior', 'name' => 'Richard Costner'})
+    end
+    emits = d1.emits
+    p emits[0]
+    assert_equal 1, emits.length
+    assert_equal 'api.production.warrior', emits[0][0] # tag
+
+    d2 = create_driver(CONFIG_USE_OF_FIRST_MATCH_TAG_REGEXP, 'hoge_application.development.api')
+    d2.run do
+      d2.emit({'user_id' => '1000', 'type' => 'warrior', 'name' => 'Mason Smith'})
+    end
+    emits = d2.emits
+    p emits[0]
+    assert_equal 1, emits.length
+    assert_equal 'api.development.warrior', emits[0][0]
+
   end
 
 end
