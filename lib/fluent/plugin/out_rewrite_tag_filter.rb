@@ -3,6 +3,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
 
   config_param :capitalize_regex_backreference, :bool, :default => false
   config_param :remove_tag_prefix, :string, :default => nil
+  config_param :split_of_tag, :bool, :default => false
   config_param :hostname_command, :string, :default => 'hostname'
 
   MATCH_OPERATOR_EXCLUDE = '!'
@@ -61,7 +62,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
         backreference_table = get_backreference_table($~.captures)
         rewritetag = rewritetag.gsub(/\$\d+/, backreference_table)
       end
-      rewritetag = rewritetag.gsub(/(\${[a-z]+}|__[A-Z]+__)/, placeholder)
+      rewritetag = rewritetag.gsub(/(\${[a-z]+(\[[0-2]\])?}|__[A-Z]+__)/, placeholder)
       return rewritetag
     end
     return nil
@@ -99,12 +100,23 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
 
   def get_placeholder(tag)
     tag = tag.sub(@remove_tag_prefix, '') if @remove_tag_prefix
-    return {
+    tag1, tag2, tag3 = tag.split('.') if @split_of_tag
+    result = {
       '__HOSTNAME__' => @hostname,
       '${hostname}' => @hostname,
       '__TAG__' => tag,
       '${tag}' => tag,
     }
+
+    if @split_of_tag
+      result.merge!({
+        '${tag[0]}' => tag1,
+        '${tag[1]}' => tag2,
+        '${tag[2]}' => tag3,
+      })
+    end
+
+    return result
   end
 end
 

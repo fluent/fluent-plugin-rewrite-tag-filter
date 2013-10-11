@@ -55,6 +55,15 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     rewriterule20 domain ^news\.google\.com$ site.GoogleNews
   ]
 
+  # split of tag
+  CONFIG_SPLIT_OF_TAG = %[
+    split_of_tag yes
+    rewriterule1 user_name ^Lynn Minmay$ vip.${tag[1]}.remember_love
+    rewriterule2 user_name ^Harlock$ ${tag[2]}.${tag[0]}.${tag[1]}
+    rewriterule3 world ^(alice|chaos)$ application.${tag[0]}.$1_server
+    rewriterule4 world ^[a-z]+$ application.${tag[1]}.future_server
+  ]
+
   def create_driver(conf=CONFIG,tag='test')
     Fluent::Test::OutputTestDriver.new(Fluent::RewriteTagFilterOutput, tag).configure(conf)
   end
@@ -187,6 +196,31 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     p emits[1]
     assert_equal 'site.GoogleNews', emits[1][0] # tag
   end
+
+  def test_emit8_split_of_tag
+    d1 = create_driver(CONFIG_SPLIT_OF_TAG, 'game.production.api')
+    d1.run do
+      d1.emit({'user_id' => '10000', 'world' => 'chaos', 'user_name' => 'gamagoori'})
+      d1.emit({'user_id' => '10001', 'world' => 'chaos', 'user_name' => 'sanageyama'})
+      d1.emit({'user_id' => '10002', 'world' => 'nehan', 'user_name' => 'inumuta'})
+      d1.emit({'user_id' => '77777', 'world' => 'space', 'user_name' => 'Lynn Minmay'})
+      d1.emit({'user_id' => '99999', 'world' => 'space', 'user_name' => 'Harlock'})
+    end
+    emits = d1.emits
+    p emits
+    assert_equal 5, emits.length
+    p emits[0]
+    assert_equal 'application.game.chaos_server', emits[0][0]
+    p emits[1]
+    assert_equal 'application.game.chaos_server', emits[1][0]
+    p emits[2]
+    assert_equal 'application.production.future_server', emits[2][0]
+    p emits[3]
+    assert_equal 'vip.production.remember_love', emits[3][0]
+    p emits[4]
+    assert_equal 'api.game.production', emits[4][0]
+  end
+
 
 end
 
