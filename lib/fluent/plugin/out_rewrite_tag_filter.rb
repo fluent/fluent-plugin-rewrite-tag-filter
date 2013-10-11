@@ -99,7 +99,6 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
 
   def get_placeholder(tag)
     tag = tag.sub(@remove_tag_prefix, '') if @remove_tag_prefix
-    tags = tag.split('.')
 
     result = {
       '__HOSTNAME__' => @hostname,
@@ -108,10 +107,8 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
       '${tag}' => tag,
     }
 
-    tags.each_with_index do |tag, idx|
-      result.merge!({
-        "${tag[#{idx}]}" => tag
-      })
+    tag.split('.').each_with_index do |t, idx|
+      result.store("${tags[#{idx}]}", t)
     end
 
     return result

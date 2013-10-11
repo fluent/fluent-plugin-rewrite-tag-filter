@@ -57,11 +57,10 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
 
   # split of tag
   CONFIG_SPLIT_OF_TAG = %[
-    split_of_tag yes
-    rewriterule1 user_name ^Lynn Minmay$ vip.${tag[1]}.remember_love
-    rewriterule2 user_name ^Harlock$ ${tag[2]}.${tag[0]}.${tag[1]}
-    rewriterule3 world ^(alice|chaos)$ application.${tag[0]}.$1_server
-    rewriterule4 world ^[a-z]+$ application.${tag[1]}.future_server
+    rewriterule1 user_name ^Lynn Minmay$ vip.${tags[1]}.remember_love
+    rewriterule2 user_name ^Harlock$ ${tags[2]}.${tags[0]}.${tags[1]}
+    rewriterule3 world ^(alice|chaos)$ application.${tags[0]}.$1_server
+    rewriterule4 world ^[a-z]+$ application.${tags[1]}.future_server
   ]
 
   def create_driver(conf=CONFIG,tag='test')
