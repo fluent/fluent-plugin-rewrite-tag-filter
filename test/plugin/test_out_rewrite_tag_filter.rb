@@ -77,6 +77,12 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     assert_raise(Fluent::ConfigError) {
       d = create_driver('rewriterule1 foo foo')
     }
+    assert_raise(Fluent::ConfigError) {
+      d = create_driver('rewriterule1 hoge hoge.${tag[0..2]}')
+    }
+    assert_raise(Fluent::ConfigError) {
+      d = create_driver('rewriterule1 fuga fuga.${tag[1...2]}')
+    }
     d = create_driver %[
       rewriterule1 domain ^www.google.com$ site.Google
       rewriterule2 domain ^news.google.com$ site.GoogleNews

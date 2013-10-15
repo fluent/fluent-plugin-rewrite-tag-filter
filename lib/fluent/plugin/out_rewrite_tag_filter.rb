@@ -19,6 +19,11 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
       if regexp.nil? || rewritetag.nil?
         raise Fluent::ConfigError, "failed to parse rewriterules at #{key} #{conf[key]}"
       end
+
+      unless rewritetag.match(/\$\{tag\[\d\.\.\.?\d\]\}/).nil?
+        raise Fluent::ConfigError, "${tags} placeholder does not support range specify at #{key} #{conf[key]}"
+      end
+
       @rewriterules.push([rewritekey, /#{trim_regex_quote(regexp)}/, get_match_operator(regexp), rewritetag])
       rewriterule_names.push(rewritekey + regexp)
       $log.info "adding rewrite_tag_filter rule: #{key} #{@rewriterules.last}"
