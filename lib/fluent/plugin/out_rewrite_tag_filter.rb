@@ -19,6 +19,11 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
       if regexp.nil? || rewritetag.nil?
         raise Fluent::ConfigError, "failed to parse rewriterules at #{key} #{conf[key]}"
       end
+
+      unless rewritetag.match(/\$\{tags\[\d\.\.\.?\d\]\}/).nil?
+        raise Fluent::ConfigError, "${tags} placeholder does not support range specify at #{key} #{conf[key]}"
+      end
+
       @rewriterules.push([rewritekey, /#{trim_regex_quote(regexp)}/, get_match_operator(regexp), rewritetag])
       rewriterule_names.push(rewritekey + regexp)
       $log.info "adding rewrite_tag_filter rule: #{key} #{@rewriterules.last}"
@@ -61,7 +66,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
         backreference_table = get_backreference_table($~.captures)
         rewritetag = rewritetag.gsub(/\$\d+/, backreference_table)
       end
-      rewritetag = rewritetag.gsub(/(\${[a-z]+}|__[A-Z]+__)/, placeholder)
+      rewritetag = rewritetag.gsub(/(\${[a-z]+(\[[0-9]+\])?}|__[A-Z]+__)/, placeholder)
       return rewritetag
     end
     return nil
@@ -99,12 +104,19 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
 
   def get_placeholder(tag)
     tag = tag.sub(@remove_tag_prefix, '') if @remove_tag_prefix
-    return {
+
+    result = {
       '__HOSTNAME__' => @hostname,
       '${hostname}' => @hostname,
       '__TAG__' => tag,
       '${tag}' => tag,
     }
+
+    tag.split('.').each_with_index do |t, idx|
+      result.store("${tags[#{idx}]}", t)
+    end
+
+    return result
   end
 end
 

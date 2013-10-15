@@ -122,6 +122,14 @@ It is supporting there placeholder for new_tag(rewrited tag).
 It's available to use this placeholder with `remove_tag_prefix` option.  
 This option adds removing tag prefix for `${tag}` or `__TAG__` in placeholder.
 
+- `{$tags[0]}`
+- `{$tags[1]}`
+- `{$tags[2]}`
+
+Tag placeholder is element index access can be used.
+When second tag element acccess of ```foo.bar.baz```, use ```${tags[1]}``` (bar).
+**Not support range setting ```${tags[0..2]}```**.
+
 - `${hostname}`
 - `__HOSTNAME__`
 
