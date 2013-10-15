@@ -20,7 +20,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
         raise Fluent::ConfigError, "failed to parse rewriterules at #{key} #{conf[key]}"
       end
 
-      unless rewritetag.match(/\$\{tag\[\d\.\.\.?\d\]\}/).nil?
+      unless rewritetag.match(/\$\{tags\[\d\.\.\.?\d\]\}/).nil?
         raise Fluent::ConfigError, "${tags} placeholder does not support range specify at #{key} #{conf[key]}"
       end
 
