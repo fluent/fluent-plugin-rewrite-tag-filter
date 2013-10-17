@@ -114,27 +114,29 @@ $ tailf /var/log/td-agent/td-agent.log
 
 ### Tag placeholder
 
-It is supporting there placeholder for new_tag(rewrited tag).
+It is supported these placeholder for new_tag (rewrited tag).
 
 - `${tag}`
 - `__TAG__`
-
-It's available to use this placeholder with `remove_tag_prefix` option.  
-This option adds removing tag prefix for `${tag}` or `__TAG__` in placeholder.
-
-- `{$tags[0]}`
-- `{$tags[1]}`
-- `{$tags[2]}`
-
-Tag placeholder is element index access can be used.
-When second tag element acccess of ```foo.bar.baz```, use ```${tags[1]}``` (bar).
-**Not support range setting ```${tags[0..2]}```**.
-
+- `{$tags[n]}`
 - `${hostname}`
 - `__HOSTNAME__`
 
+The placeholder of `{$tags[n]}` acts accessing the index which split the tag with "." (dot).  
+It will get `td` by `${tags[0]}` and `apache` by `${tags[1]}` when the tag was `td.apache.access`.
+
+**Note** Currently, range expression ```${tags[0..2]}``` is not supported.
+
+#### Placeholder Option
+
+* `remove_tag_prefix`  
+
+This option adds removing tag prefix for `${tag}` or `__TAG__` in placeholder.
+
+* `hostname_command` 
+
 By default, execute command as `hostname` to get full hostname.  
-Also, you can override hostname command using `hostname_command` option.  
+On your needs, it could override hostname command using `hostname_command` option.  
 It comes short hostname with `hostname_command hostname -s` configuration specified.
 
 #### Placeholder Usage
@@ -161,6 +163,14 @@ It's a sample to rewrite a tag with placeholder.
   rewriterule1  domain  ^(mail)\.(example)\.com$  rewrited.$2$1.${hostname}
   hostname_command hostname -s
 </match>
+
+# It will get "rewrited.game.pool"
+<match app.game.pool.activity>
+  type rewrite_tag_filter
+  rewriterule1  domain  ^.+$  rewrited.${tags[1]}.${tags[2]}
+</match>
+
+
 ```
 
 ## Example
