@@ -57,10 +57,10 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
 
   # split by tag
   CONFIG_SPLIT_BY_TAG = %[
-    rewriterule1 user_name ^Lynn Minmay$ vip.${tag_part[1]}.remember_love
-    rewriterule2 user_name ^Harlock$ ${tag_part[2]}.${tag_part[0]}.${tag_part[1]}
-    rewriterule3 world ^(alice|chaos)$ application.${tag_part[0]}.$1_server
-    rewriterule4 world ^[a-z]+$ application.${tag_part[1]}.future_server
+    rewriterule1 user_name ^Lynn Minmay$ vip.${tag_parts[1]}.remember_love
+    rewriterule2 user_name ^Harlock$ ${tag_parts[2]}.${tag_parts[0]}.${tag_parts[1]}
+    rewriterule3 world ^(alice|chaos)$ application.${tag_parts[0]}.$1_server
+    rewriterule4 world ^[a-z]+$ application.${tag_parts[1]}.future_server
   ]
 
   def create_driver(conf=CONFIG,tag='test')
@@ -78,10 +78,10 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       d = create_driver('rewriterule1 foo foo')
     }
     assert_raise(Fluent::ConfigError) {
-      d = create_driver('rewriterule1 hoge hoge.${tag_part[0..2]}')
+      d = create_driver('rewriterule1 hoge hoge.${tag_parts[0..2]}.__TAG_PARTS[0..2]__')
     }
     assert_raise(Fluent::ConfigError) {
-      d = create_driver('rewriterule1 fuga fuga.${tag_part[1...2]}')
+      d = create_driver('rewriterule1 fuga fuga.${tag_parts[1...2]}.__TAG_PARTS[1...2]__')
     }
     d = create_driver %[
       rewriterule1 domain ^www.google.com$ site.Google
