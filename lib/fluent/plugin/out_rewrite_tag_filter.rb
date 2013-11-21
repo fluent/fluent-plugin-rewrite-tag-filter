@@ -20,8 +20,8 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
         raise Fluent::ConfigError, "failed to parse rewriterules at #{key} #{conf[key]}"
       end
 
-      unless rewritetag.match(/\$\{tags\[\d\.\.\.?\d\]\}/).nil?
-        raise Fluent::ConfigError, "${tags} placeholder does not support range specify at #{key} #{conf[key]}"
+      unless rewritetag.match(/\$\{tag_part\[\d\.\.\.?\d\]\}/).nil? or rewritetag.match(/__TAG_PART\[\d\.\.\.?\d\]__/).nil?
+        raise Fluent::ConfigError, "${tag_part[n]} and __TAG_PART[n]__ placeholder does not support range specify at #{key} #{conf[key]}"
       end
 
       @rewriterules.push([rewritekey, /#{trim_regex_quote(regexp)}/, get_match_operator(regexp), rewritetag])
@@ -66,7 +66,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
         backreference_table = get_backreference_table($~.captures)
         rewritetag = rewritetag.gsub(/\$\d+/, backreference_table)
       end
-      rewritetag = rewritetag.gsub(/(\${[a-z]+(\[[0-9]+\])?}|__[A-Z]+__)/, placeholder)
+      rewritetag = rewritetag.gsub(/(\${[a-z_]+(\[[0-9]+\])?}|__[A-Z_]+__)/, placeholder)
       return rewritetag
     end
     return nil
@@ -113,7 +113,8 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     }
 
     tag.split('.').each_with_index do |t, idx|
-      result.store("${tags[#{idx}]}", t)
+      result.store("${tag_part[#{idx}]}", t)
+      result.store("__TAG_PART[#{idx}]__", t)
     end
 
     return result

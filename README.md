@@ -118,14 +118,15 @@ It is supported these placeholder for new_tag (rewrited tag).
 
 - `${tag}`
 - `__TAG__`
-- `{$tags[n]}`
+- `{$tag_part[n]}`
+- `__TAG_PART[n]__`
 - `${hostname}`
 - `__HOSTNAME__`
 
-The placeholder of `{$tags[n]}` acts accessing the index which split the tag with "." (dot).  
-It will get `td` by `${tags[0]}` and `apache` by `${tags[1]}` when the tag was `td.apache.access`.
+The placeholder of `{$tag_part[n]}` and `__TAG_PART[n]__` acts accessing the index which split the tag with "." (dot).  
+For example with `td.apache.access` tag, it will get `td` by `${tag_part[0]}` and `apache` by `${tag_part[1]}`.
 
-**Note** Currently, range expression ```${tags[0..2]}``` is not supported.
+**Note** Currently, range expression ```${tag_part[0..2]}``` is not supported.
 
 #### Placeholder Option
 
@@ -167,7 +168,7 @@ It's a sample to rewrite a tag with placeholder.
 # It will get "rewrited.game.pool"
 <match app.game.pool.activity>
   type rewrite_tag_filter
-  rewriterule1  domain  ^.+$  rewrited.${tags[1]}.${tags[2]}
+  rewriterule1  domain  ^.+$  rewrited.${tag_part[1]}.${tag_part[2]}
 </match>
 
 
