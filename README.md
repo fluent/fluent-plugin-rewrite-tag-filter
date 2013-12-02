@@ -170,8 +170,6 @@ It's a sample to rewrite a tag with placeholder.
   type rewrite_tag_filter
   rewriterule1  domain  ^.+$  rewrited.${tag_parts[1]}.${tag_parts[2]}
 </match>
-
-
 ```
 
 ## Example
@@ -216,6 +214,9 @@ http://chopl.in/blog/2013/06/07/postgresql_csv_log_with_fluentd.html
 
 - S3とFluentdを用いた効率的なログ管理 | SmartNews開発者ブログ  
 http://developer.smartnews.be/blog/2013/09/02/an-effective-log-management-technique-which-uses-fluentd-and-s3/
+
+- fluentd(td-agent) の導入 : Raccoon Tech Blog [株式会社ラクーン 技術戦略部ブログ]  
+http://techblog.raccoon.ne.jp/archives/35031163.html
 
 ## TODO
 
