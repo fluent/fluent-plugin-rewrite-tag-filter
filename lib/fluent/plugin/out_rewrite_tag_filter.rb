@@ -66,7 +66,10 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
         backreference_table = get_backreference_table($~.captures)
         rewritetag = rewritetag.gsub(/\$\d+/, backreference_table)
       end
-      rewritetag = rewritetag.gsub(/(\${[a-z_]+(\[[0-9]+\])?}|__[A-Z_]+__)/, placeholder)
+      rewritetag = rewritetag.gsub(/(\${[a-z_]+(\[[0-9]+\])?}|__[A-Z_]+__)/) do
+        $log.warn "rewrite_tag_filter: unknown placeholder found. :placeholder=>#{$1} :tag=>#{tag} :rewritetag=>#{rewritetag}" unless placeholder.include?($1)
+        placeholder[$1]
+      end
       return rewritetag
     end
     return nil
