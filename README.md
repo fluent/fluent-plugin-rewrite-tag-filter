@@ -1,10 +1,8 @@
-# Rewrite Tags for [Fluentd](http://fluentd.org) like `mod_rewrite` [![Build Status](https://travis-ci.org/fluent/fluent-plugin-rewrite-tag-filter.png?branch=master)](https://travis-ci.org/fluent/fluent-plugin-rewrite-tag-filter)
+# fluent-plugin-rewrite-tag-filter [![Build Status](https://travis-ci.org/fluent/fluent-plugin-rewrite-tag-filter.png?branch=master)](https://travis-ci.org/fluent/fluent-plugin-rewrite-tag-filter)
 
 ## Overview
 
-### RewriteTagFilterOutput
-
-Rewrite Tag Filter is designed to rewrite [Fluentd](http://fluentd.org)([GitHub](http://github.com/fluent/fluentd)) tags like mod_rewrite.  
+Rewrite Tag Filter for [Fluentd](http://fluentd.org). It is designed to rewrite tags like mod_rewrite.  
 Re-emit the record with rewrited tag when a value matches/unmatches with a regular expression.  
 Also you can change a tag from Apache log by domain, status code (ex. 500 error),  
 user-agent, request-uri, regex-backreference and so on with regular expression.
