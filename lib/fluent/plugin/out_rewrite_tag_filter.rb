@@ -57,13 +57,13 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     @rewriterules.each do |rewritekey, regexp, match_operator, rewritetag|
       rewritevalue = record[rewritekey].to_s
       next if rewritevalue.empty? && match_operator != MATCH_OPERATOR_EXCLUDE
-      matched = regexp && regexp.match(rewritevalue)
+      last_match = regexp_last_match(regexp, rewritevalue)
       case match_operator
       when MATCH_OPERATOR_EXCLUDE
-        next if matched
+        next if last_match
       else
-        next if !matched
-        backreference_table = get_backreference_table($~.captures)
+        next if !last_match
+        backreference_table = get_backreference_table(last_match.captures)
         rewritetag = rewritetag.gsub(/\$\d+/, backreference_table)
       end
       rewritetag = rewritetag.gsub(/(\${[a-z_]+(\[[0-9]+\])?}|__[A-Z_]+__)/) do
@@ -73,6 +73,19 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
       return rewritetag
     end
     return nil
+  end
+
+  def regexp_last_match(regexp, rewritevalue)
+    begin
+      return if regexp.nil?
+      regexp.match(rewritevalue)
+      return $~
+    rescue ArgumentError => e
+      raise e unless e.message.index("invalid byte sequence in") == 0
+      replaced_string = replace_invalid_byte(rewritevalue)
+      regexp.match(replaced_string)
+      return $~
+    end
   end
 
   def parse_rewriterule(rule)
@@ -121,6 +134,12 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     end
 
     return result
+  end
+
+  def replace_invalid_byte(string)
+    replace_options = { invalid: :replace, undef: :replace, replace: '?' }
+    temporal_encoding = (string.encoding == Encoding::UTF_8 ? Encoding::UTF_16BE : Encoding::UTF_8)
+    string.encode(temporal_encoding, string.encoding, replace_options).encode(string.encoding)
   end
 end
 
