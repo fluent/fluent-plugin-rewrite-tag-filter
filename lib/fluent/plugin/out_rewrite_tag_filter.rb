@@ -7,6 +7,11 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
 
   MATCH_OPERATOR_EXCLUDE = '!'
 
+  def initialize
+    super
+    require 'string/scrub'
+  end
+
   def configure(conf)
     super
 
@@ -81,9 +86,8 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
       regexp.match(rewritevalue)
       return $~
     rescue ArgumentError => e
-      raise e unless e.message.index("invalid byte sequence in") == 0
-      replaced_string = replace_invalid_byte(rewritevalue)
-      regexp.match(replaced_string)
+      raise e unless e.message.index('invalid byte sequence in') == 0
+      regexp.match(rewritevalue.scrub('?'))
       return $~
     end
   end
@@ -134,12 +138,6 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     end
 
     return result
-  end
-
-  def replace_invalid_byte(string)
-    replace_options = { invalid: :replace, undef: :replace, replace: '?' }
-    temporal_encoding = (string.encoding == Encoding::UTF_8 ? Encoding::UTF_16BE : Encoding::UTF_8)
-    string.encode(temporal_encoding, string.encoding, replace_options).encode(string.encoding)
   end
 end
 
