@@ -7,6 +7,11 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
 
   MATCH_OPERATOR_EXCLUDE = '!'
 
+  def initialize
+    super
+    require 'string/scrub'
+  end
+
   def configure(conf)
     super
 
@@ -57,13 +62,13 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     @rewriterules.each do |rewritekey, regexp, match_operator, rewritetag|
       rewritevalue = record[rewritekey].to_s
       next if rewritevalue.empty? && match_operator != MATCH_OPERATOR_EXCLUDE
-      matched = regexp && regexp.match(rewritevalue)
+      last_match = regexp_last_match(regexp, rewritevalue)
       case match_operator
       when MATCH_OPERATOR_EXCLUDE
-        next if matched
+        next if last_match
       else
-        next if !matched
-        backreference_table = get_backreference_table($~.captures)
+        next if !last_match
+        backreference_table = get_backreference_table(last_match.captures)
         rewritetag = rewritetag.gsub(/\$\d+/, backreference_table)
       end
       rewritetag = rewritetag.gsub(/(\${[a-z_]+(\[[0-9]+\])?}|__[A-Z_]+__)/) do
@@ -73,6 +78,18 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
       return rewritetag
     end
     return nil
+  end
+
+  def regexp_last_match(regexp, rewritevalue)
+    begin
+      return if regexp.nil?
+      regexp.match(rewritevalue)
+      return $~
+    rescue ArgumentError => e
+      raise e unless e.message.index('invalid byte sequence in') == 0
+      regexp.match(rewritevalue.scrub('?'))
+      return $~
+    end
   end
 
   def parse_rewriterule(rule)

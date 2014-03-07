@@ -63,6 +63,11 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     rewriterule4 world ^[a-z]+$ application.${tag_parts[1]}.future_server
   ]
 
+  # test for invalid byte sequence in UTF-8 error
+  CONFIG_INVALID_BYTE = %[
+    rewriterule1 client_name (.+) app.$1
+  ]
+
   def create_driver(conf=CONFIG,tag='test')
     Fluent::Test::OutputTestDriver.new(Fluent::RewriteTagFilterOutput, tag).configure(conf)
   end
@@ -226,6 +231,30 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     assert_equal 'api.game.production', emits[4][0]
   end
 
+  def test_emit9_invalid_byte
+    invalid_utf8 = "\xff".force_encoding('UTF-8')
+    d1 = create_driver(CONFIG_INVALID_BYTE, 'input.activity')
+    d1.run do
+      d1.emit({'client_name' => invalid_utf8})
+    end
+    emits = d1.emits
+    p emits
+    assert_equal 1, emits.length
+    p emits[0]
+    assert_equal "app.?", emits[0][0]
+    assert_equal invalid_utf8, emits[0][2]['client_name']
 
+    invalid_ascii = "\xff".force_encoding('US-ASCII')
+    d1 = create_driver(CONFIG_INVALID_BYTE, 'input.activity')
+    d1.run do
+      d1.emit({'client_name' => invalid_ascii})
+    end
+    emits = d1.emits
+    p emits
+    assert_equal 1, emits.length
+    p emits[0]
+    assert_equal "app.?", emits[0][0]
+    assert_equal invalid_ascii, emits[0][2]['client_name']
+  end
 end
 
