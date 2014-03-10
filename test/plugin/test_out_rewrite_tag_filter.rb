@@ -92,7 +92,6 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       rewriterule1 domain ^www.google.com$ site.Google
       rewriterule2 domain ^news.google.com$ site.GoogleNews
     ]
-    puts d.instance.inspect
     assert_equal 'domain ^www.google.com$ site.Google', d.instance.config['rewriterule1']
     assert_equal 'domain ^news.google.com$ site.GoogleNews', d.instance.config['rewriterule2']
   end
@@ -109,16 +108,11 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     end
     emits = d1.emits
     assert_equal 5, emits.length
-    p emits[0]
     assert_equal 'site.Google', emits[0][0] # tag
-    p emits[1]
     assert_equal 'site.GoogleNews', emits[1][0] # tag
     assert_equal 'news.google.com', emits[1][2]['domain']
-    p emits[2]
     assert_equal 'agent.MacOSX', emits[2][0] #tag
-    p emits[3]
     assert_equal 'agent.Googlebot-FooBar', emits[3][0] #tag
-    p emits[4]
     assert_equal 'site.input.access.tagtest', emits[4][0] #tag
   end
 
@@ -132,14 +126,10 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     end
     emits = d1.emits
     assert_equal 4, emits.length
-    p emits[0]
     assert_equal 'site.Google', emits[0][0] # tag
-    p emits[1]
     assert_equal 'site.GoogleNews', emits[1][0] # tag
     assert_equal 'news.google.com', emits[1][2]['domain']
-    p emits[2]
     assert_equal 'agent.MacOSX', emits[2][0] #tag
-    p emits[3]
     assert_equal 'agent.Googlebot-Foobar', emits[3][0] #tag
   end
 
@@ -150,7 +140,6 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     end
     emits = d1.emits
     assert_equal 1, emits.length
-    p emits[0]
     assert_equal 'access', emits[0][0] # tag
   end
 
@@ -161,7 +150,6 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     end
     emits = d1.emits
     assert_equal 1, emits.length
-    p emits[0]
     assert_equal 'access', emits[0][0] # tag
   end
 
@@ -172,7 +160,6 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     end
     emits = d1.emits
     assert_equal 1, emits.length
-    p emits[0]
     assert_equal `hostname -s`.chomp, emits[0][0] # tag
   end
 
@@ -185,11 +172,8 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     end
     emits = d1.emits
     assert_equal 3, emits.length
-    p emits[0]
     assert_equal 'start_with_www', emits[0][0] # tag
-    p emits[1]
     assert_equal 'not_start_with_www', emits[1][0] # tag
-    p emits[2]
     assert_equal 'not_start_with_www', emits[2][0] # tag
   end
 
@@ -201,9 +185,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     end
     emits = d1.emits
     assert_equal 2, emits.length
-    p emits[0]
     assert_equal 'site.Google', emits[0][0] # tag
-    p emits[1]
     assert_equal 'site.GoogleNews', emits[1][0] # tag
   end
 
@@ -217,17 +199,11 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       d1.emit({'user_id' => '99999', 'world' => 'space', 'user_name' => 'Harlock'})
     end
     emits = d1.emits
-    p emits
     assert_equal 5, emits.length
-    p emits[0]
     assert_equal 'application.game.chaos_server', emits[0][0]
-    p emits[1]
     assert_equal 'application.game.chaos_server', emits[1][0]
-    p emits[2]
     assert_equal 'application.production.future_server', emits[2][0]
-    p emits[3]
     assert_equal 'vip.production.remember_love', emits[3][0]
-    p emits[4]
     assert_equal 'api.game.production', emits[4][0]
   end
 
@@ -238,9 +214,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       d1.emit({'client_name' => invalid_utf8})
     end
     emits = d1.emits
-    p emits
     assert_equal 1, emits.length
-    p emits[0]
     assert_equal "app.?", emits[0][0]
     assert_equal invalid_utf8, emits[0][2]['client_name']
 
@@ -250,11 +224,8 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       d1.emit({'client_name' => invalid_ascii})
     end
     emits = d1.emits
-    p emits
     assert_equal 1, emits.length
-    p emits[0]
     assert_equal "app.?", emits[0][0]
     assert_equal invalid_ascii, emits[0][2]['client_name']
   end
 end
-
