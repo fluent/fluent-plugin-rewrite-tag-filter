@@ -180,41 +180,44 @@ https://github.com/y-ken/fluent-plugin-rewrite-tag-filter/blob/master/example2.c
 
 ## Related Articles
 
-- 自在にタグを書き換える fluent-plugin-rewrite-tag-filter でログ解析が捗るお話 #fluentd  
+- 自在にタグを書き換える fluent-plugin-rewrite-tag-filter でログ解析が捗るお話 #fluentd<br>
 http://d.hatena.ne.jp/yoshi-ken/20120701/1341137269
 
-- Fluentd & TreasureDataで こっそり始めるログ集計 Fluentd Meetup #2 @mikeda  
+- Fluentd & TreasureDataで こっそり始めるログ集計 Fluentd Meetup #2 @mikeda<br>
 http://www.slideshare.net/baguzy/fluentd-meetup-2-14073930
 
-- 似てる #fluentd プラグインの比較  
+- 似てる #fluentd プラグインの比較<br>
 http://matsumana.wordpress.com/2012/11/15/%E4%BC%BC%E3%81%A6%E3%82%8B-fluentd-%E3%83%97%E3%83%A9%E3%82%B0%E3%82%A4%E3%83%B3%E3%81%AE%E6%AF%94%E8%BC%83/
 
-- Fluentdの集約サーバ用設定ファイル (fluent-plugin-rewrite-tag-filter版)  
+- Fluentdの集約サーバ用設定ファイル (fluent-plugin-rewrite-tag-filter版)<br>
 https://gist.github.com/matsumana/4078096
 
-- 稼働中のFluentdにflowcounter pluginを導入してみた  
+- 稼働中のFluentdにflowcounter pluginを導入してみた<br>
 http://dayafterneet.blogspot.jp/2012/12/fluentdflowcounter-plugin.html
 
-- fluent-plugin-rewrite-tag-filter v1.2.0 をリリースしました。新機能であるremove_tag_prefix設定の使い方を解説します。 #fluentd  
+- fluent-plugin-rewrite-tag-filter v1.2.0 をリリースしました。新機能であるremove_tag_prefix設定の使い方を解説します。 #fluentd<br>
 http://y-ken.hatenablog.com/entry/fluent-plugin-rewrite-tag-filter-v1.2.0
 
-- fluent-plugin-rewrite-tag-filter v1.2.1 をリリースしました。設定サンプルと共にプレースホルダ機能強化内容を紹介します。 #fluentd  
+- fluent-plugin-rewrite-tag-filter v1.2.1 をリリースしました。設定サンプルと共にプレースホルダ機能強化内容を紹介します。 #fluentd<br>
 http://y-ken.hatenablog.com/entry/fluent-plugin-rewrite-tag-filter-v1.2.1
 
-- 待望の正規表現の否定パターンに対応した fluent-plugin-rewrite-tag-filter v1.3.0 をリリースしました #fluentd  
+- 待望の正規表現の否定パターンに対応した fluent-plugin-rewrite-tag-filter v1.3.0 をリリースしました #fluentd<br>
 http://y-ken.hatenablog.com/entry/fluent-plugin-rewrite-tag-filter-v1.3.0
 
-- 不具合修正版 fluent-plugin-rewrite-tag-filter v1.3.1 をリリースしました #fluentd  
+- 不具合修正版 fluent-plugin-rewrite-tag-filter v1.3.1 をリリースしました #fluentd<br>
 http://y-ken.hatenablog.com/entry/fluent-plugin-rewrite-tag-filter-v1.3.1
 
-- PostgreSQLのログをfluentdで回収する設定 — still deeper  
+- PostgreSQLのログをfluentdで回収する設定 — still deeper<br>
 http://chopl.in/blog/2013/06/07/postgresql_csv_log_with_fluentd.html
 
-- S3とFluentdを用いた効率的なログ管理 | SmartNews開発者ブログ  
+- S3とFluentdを用いた効率的なログ管理 | SmartNews開発者ブログ<br>
 http://developer.smartnews.be/blog/2013/09/02/an-effective-log-management-technique-which-uses-fluentd-and-s3/
 
-- fluentd(td-agent) の導入 : Raccoon Tech Blog [株式会社ラクーン 技術戦略部ブログ]  
+- fluentd(td-agent) の導入 : Raccoon Tech Blog [株式会社ラクーン 技術戦略部ブログ]<br>
 http://techblog.raccoon.ne.jp/archives/35031163.html
+
+- fluent-plugin-rewrite-tag-filter v1.4.1 をリリースしました #fluentd<br>
+http://y-ken.hatenablog.com/entry/fluent-plugin-rewrite-tag-filter-v1.4.1
 
 ## TODO
 
