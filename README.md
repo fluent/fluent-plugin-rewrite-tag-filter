@@ -9,14 +9,17 @@ user-agent, request-uri, regex-backreference and so on with regular expression.
 
 ## Installation
 
-Install with gem or fluent-gem command as:
+Install with `gem`, `fluent-gem` or `td-agent-gem` command as:
 
 ```
-# for fluentd
+# for system installed fluentd
 $ gem install fluent-plugin-rewrite-tag-filter
 
 # for td-agent
 $ sudo /usr/lib64/fluent/ruby/bin/fluent-gem install fluent-plugin-rewrite-tag-filter
+
+# for td-agent2
+$ sudo td-agent-gem install fluent-plugin-rewrite-tag-filter
 ```
 
 ## Configuration
@@ -35,6 +38,9 @@ remove_tag_prefix <string>
 
 # Optional: override hostname command for placeholder. (see the section of "Tag placeholder")
 hostname_command <string>
+
+# Optional: Set log level for this plugin. (ex: trace, debug, info, warn, error, fatal)
+log_level        <string> (default info)
 ```
 
 ### Usage
