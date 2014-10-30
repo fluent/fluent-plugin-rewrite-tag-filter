@@ -7,6 +7,11 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
 
   MATCH_OPERATOR_EXCLUDE = '!'
 
+  # Define `log` method for v0.10.42 or earlier
+  unless method_defined?(:log)
+    define_method("log") { $log }
+  end
+
   def initialize
     super
     require 'string/scrub'
@@ -31,7 +36,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
 
       @rewriterules.push([rewritekey, /#{trim_regex_quote(regexp)}/, get_match_operator(regexp), rewritetag])
       rewriterule_names.push(rewritekey + regexp)
-      $log.info "adding rewrite_tag_filter rule: #{key} #{@rewriterules.last}"
+      log.info "adding rewrite_tag_filter rule: #{key} #{@rewriterules.last}"
     end
 
     unless @rewriterules.length > 0
@@ -72,7 +77,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
         rewritetag = rewritetag.gsub(/\$\d+/, backreference_table)
       end
       rewritetag = rewritetag.gsub(/(\${[a-z_]+(\[[0-9]+\])?}|__[A-Z_]+__)/) do
-        $log.warn "rewrite_tag_filter: unknown placeholder found. :placeholder=>#{$1} :tag=>#{tag} :rewritetag=>#{rewritetag}" unless placeholder.include?($1)
+        log.warn "rewrite_tag_filter: unknown placeholder found. :placeholder=>#{$1} :tag=>#{tag} :rewritetag=>#{rewritetag}" unless placeholder.include?($1)
         placeholder[$1]
       end
       return rewritetag
@@ -100,7 +105,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
 
   def trim_regex_quote(regexp)
     if regexp.start_with?('"') && regexp.end_with?('"')
-      $log.info "rewrite_tag_filter: [DEPRECATED] Use ^....$ pattern for partial word match instead of double-quote-delimiter. #{regexp}"
+      log.info "rewrite_tag_filter: [DEPRECATED] Use ^....$ pattern for partial word match instead of double-quote-delimiter. #{regexp}"
       regexp = regexp[1..-2]
     end
     if regexp.start_with?(MATCH_OPERATOR_EXCLUDE)
