@@ -14,7 +14,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
 
   def initialize
     super
-    require 'string/scrub'
+    require 'string/scrub' if RUBY_VERSION.to_f < 2.1
   end
 
   def configure(conf)
