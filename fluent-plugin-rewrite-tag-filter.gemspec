@@ -17,5 +17,5 @@ Gem::Specification.new do |s|
 
   s.add_development_dependency "rake"
   s.add_runtime_dependency "fluentd"
-  s.add_runtime_dependency "string-scrub", "= 0.0.5" if RUBY_VERSION.to_f < 2.1
+  s.add_runtime_dependency "string-scrub", "= 0.0.3" if RUBY_VERSION.to_f < 2.1
 end
