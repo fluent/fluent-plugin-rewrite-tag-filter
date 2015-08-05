@@ -56,7 +56,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     es.each do |time,record|
       rewrited_tag = rewrite_tag(tag, record)
       next if rewrited_tag.nil? || tag == rewrited_tag
-      Fluent::Engine.emit(rewrited_tag, time, record)
+      router.emit(rewrited_tag, time, record)
     end
 
     chain.next
