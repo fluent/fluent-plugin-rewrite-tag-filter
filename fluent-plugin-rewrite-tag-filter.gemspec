@@ -15,6 +15,7 @@ Gem::Specification.new do |s|
   s.executables   = `git ls-files -- bin/*`.split("\n").map{ |f| File.basename(f) }
   s.require_paths = ["lib"]
 
+  s.add_development_dependency "test-unit"
   s.add_development_dependency "rake"
   s.add_runtime_dependency "fluentd"
   s.add_runtime_dependency "string-scrub", "= 0.0.3" if RUBY_VERSION.to_f < 2.1
