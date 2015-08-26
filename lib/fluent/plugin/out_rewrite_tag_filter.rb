@@ -86,14 +86,10 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
   end
 
   def regexp_last_match(regexp, rewritevalue)
-    begin
-      return if regexp.nil?
+    if rewritevalue.valid_encoding?
       regexp.match(rewritevalue)
-      return $~
-    rescue ArgumentError => e
-      raise e unless e.message.index('invalid byte sequence in') == 0
+    else
       regexp.match(rewritevalue.scrub('?'))
-      return $~
     end
   end
 
