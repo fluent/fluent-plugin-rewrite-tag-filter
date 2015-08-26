@@ -228,4 +228,20 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     assert_equal "app.?", emits[0][0]
     assert_equal invalid_ascii, emits[0][2]['client_name']
   end
+
+  def test_emit10_empty_value
+    driver = create_driver(<<CONFIG, 'input.access')
+rewriterule1 agent ^$ empty.agent
+CONFIG
+
+    driver.run do
+      driver.emit('agent' => '')
+      driver.emit('agent' => 'Googlebot')
+    end
+    emits = driver.emits
+
+    assert_equal 1, emits.size
+    assert_equal 'empty.agent',emits[0][0]
+    assert_equal({'agent' => ''}, emits[0][2])
+  end
 end
