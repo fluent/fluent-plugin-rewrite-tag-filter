@@ -89,17 +89,15 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     begin
       return if regexp.nil?
       regexp.match(rewritevalue)
-      return $~
     rescue ArgumentError => e
       raise e unless e.message.index('invalid byte sequence in') == 0
       regexp.match(rewritevalue.scrub('?'))
-      return $~
     end
   end
 
   def parse_rewriterule(rule)
-    if rule.match(/^([^\s]+)\s+(.+?)\s+([^\s]+)$/)
-      return $~.captures
+    if m = rule.match(/^([^\s]+)\s+(.+?)\s+([^\s]+)$/)
+      return m.captures
     end
   end
 
