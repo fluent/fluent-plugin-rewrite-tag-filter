@@ -1,6 +1,11 @@
 class Fluent::RewriteTagFilterOutput < Fluent::Output
   Fluent::Plugin.register_output('rewrite_tag_filter', self)
 
+  # To support Fluentd v0.10.57 or earlier
+  unless method_defined?(:router)
+    define_method("router") { Fluent::Engine }
+  end
+
   config_param :capitalize_regex_backreference, :bool, :default => false
   config_param :remove_tag_prefix, :string, :default => nil
   config_param :hostname_command, :string, :default => 'hostname'
@@ -56,7 +61,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     es.each do |time,record|
       rewrited_tag = rewrite_tag(tag, record)
       next if rewrited_tag.nil? || tag == rewrited_tag
-      Fluent::Engine.emit(rewrited_tag, time, record)
+      router.emit(rewrited_tag, time, record)
     end
 
     chain.next
