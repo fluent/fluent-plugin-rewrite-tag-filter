@@ -6,8 +6,19 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     define_method("router") { Fluent::Engine }
   end
 
+  # For fluentd v0.12.16 or earlier
+  class << self
+    unless method_defined?(:desc)
+      def desc(description)
+      end
+    end
+  end
+
+  desc 'Capitalize letter for every matched regex backreference.'
   config_param :capitalize_regex_backreference, :bool, :default => false
+  desc 'Remove tag prefix for tag placeholder.'
   config_param :remove_tag_prefix, :string, :default => nil
+  desc 'Override hostname command for placeholder.'
   config_param :hostname_command, :string, :default => 'hostname'
 
   MATCH_OPERATOR_EXCLUDE = '!'
