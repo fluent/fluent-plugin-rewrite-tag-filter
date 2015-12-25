@@ -6,3 +6,6 @@ rvm:
   - 2.0.0
   - 1.9.3
 
+# to avoid travis-ci issue since 2015-12-25
+before_install:
+  - gem update bundler
