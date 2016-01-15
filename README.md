@@ -49,7 +49,7 @@ It's a sample to exclude some static file log before split tag by domain.
 
 ```
 <source>
-  type tail
+  @type tail
   path /var/log/httpd/access_log
   format apache2
   time_format %d/%b/%Y:%H:%M:%S %z
@@ -62,7 +62,7 @@ It's a sample to exclude some static file log before split tag by domain.
 # At rewriterule3, redirect to tag named "clear" which is not end with ".com"
 # At rewriterule6, "site.$2$1" to be "site.ExampleMail" by capitalize_regex_backreference option.
 <match td.apache.access>
-  type rewrite_tag_filter
+  @type rewrite_tag_filter
   capitalize_regex_backreference yes
   rewriterule1 path   \.(gif|jpe?g|png|pdf|zip)$  clear
   rewriterule2 status !^200$                      clear
@@ -74,7 +74,7 @@ It's a sample to exclude some static file log before split tag by domain.
 </match>
 
 <match site.*>
-  type mongo
+  @type mongo
   host localhost
   database apache_access
   remove_tag_prefix site
@@ -84,7 +84,7 @@ It's a sample to exclude some static file log before split tag by domain.
 </match>
 
 <match clear>
-  type null
+  @type null
 </match>
 ```
 
@@ -151,27 +151,27 @@ It's a sample to rewrite a tag with placeholder.
 ```
 # It will get "rewrited.access.ExampleMail"
 <match apache.access>
-  type rewrite_tag_filter
+  @type rewrite_tag_filter
   rewriterule1  domain  ^(mail)\.(example)\.com$  rewrited.${tag}.$2$1
   remove_tag_prefix apache
 </match>
 
 # It will get "rewrited.ExampleMail.app30-124.foo.com" when hostname is "app30-124.foo.com"
 <match apache.access>
-  type rewrite_tag_filter
+  @type rewrite_tag_filter
   rewriterule1  domain  ^(mail)\.(example)\.com$  rewrited.$2$1.${hostname}
 </match>
 
 # It will get "rewrited.ExampleMail.app30-124" when hostname is "app30-124.foo.com"
 <match apache.access>
-  type rewrite_tag_filter
+  @type rewrite_tag_filter
   rewriterule1  domain  ^(mail)\.(example)\.com$  rewrited.$2$1.${hostname}
   hostname_command hostname -s
 </match>
 
 # It will get "rewrited.game.pool"
 <match app.game.pool.activity>
-  type rewrite_tag_filter
+  @type rewrite_tag_filter
   rewriterule1  domain  ^.+$  rewrited.${tag_parts[1]}.${tag_parts[2]}
 </match>
 ```
