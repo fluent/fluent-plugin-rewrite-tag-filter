@@ -15,8 +15,8 @@ Install with `gem`, `fluent-gem` or `td-agent-gem` command as:
 # for system installed fluentd
 $ gem install fluent-plugin-rewrite-tag-filter
 
-# for td-agent
-$ sudo /usr/lib64/fluent/ruby/bin/fluent-gem install fluent-plugin-rewrite-tag-filter
+# for td-agent (Legacy)
+$ sudo /usr/lib64/fluent/ruby/bin/fluent-gem install fluent-plugin-rewrite-tag-filter -v 1.5.4
 
 # for td-agent2
 $ sudo td-agent-gem install fluent-plugin-rewrite-tag-filter
