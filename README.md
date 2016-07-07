@@ -122,12 +122,12 @@ It is supported these placeholder for new_tag (rewrited tag).
 
 - `${tag}`
 - `__TAG__`
-- `{$tag_parts[n]}`
+- `${tag_parts[n]}`
 - `__TAG_PARTS[n]__`
 - `${hostname}`
 - `__HOSTNAME__`
 
-The placeholder of `{$tag_parts[n]}` and `__TAG_PARTS[n]__` acts accessing the index which split the tag with "." (dot).  
+The placeholder of `${tag_parts[n]}` and `__TAG_PARTS[n]__` acts accessing the index which split the tag with "." (dot).  
 For example with `td.apache.access` tag, it will get `td` by `${tag_parts[0]}` and `apache` by `${tag_parts[1]}`.
 
 **Note** Currently, range expression ```${tag_parts[0..2]}``` is not supported.
