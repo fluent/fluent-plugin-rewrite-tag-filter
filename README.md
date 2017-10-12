@@ -7,6 +7,15 @@ Re-emit the record with rewrited tag when a value matches/unmatches with a regul
 Also you can change a tag from Apache log by domain, status code (ex. 500 error),  
 user-agent, request-uri, regex-backreference and so on with regular expression.
 
+## Requirements
+
+| fluent-plugin-rewrite-tag-filter | Fluentd    | Ruby   |
+|----------------------------------|------------|--------|
+| >= 2.0.0                         | >= v0.14.2 | >= 2.1 |
+| < 2.0.0                          | >= v0.12.0 | >= 1.9 |
+
+NOTE: fluent-plugin-rewrite-tag-filter v2.0.0 is now RC. We will release stable v2.0.0 soon.
+
 ## Installation
 
 Install with `gem`, `fluent-gem` or `td-agent-gem` command as:
