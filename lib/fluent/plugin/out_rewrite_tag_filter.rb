@@ -14,11 +14,6 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
   MATCH_OPERATOR_EXCLUDE = '!'
 
-  def initialize
-    super
-    require 'string/scrub' if RUBY_VERSION.to_f < 2.1
-  end
-
   def configure(conf)
     super
 
