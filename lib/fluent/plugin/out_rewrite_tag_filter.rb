@@ -3,7 +3,7 @@ require "fluent/plugin/output"
 class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   Fluent::Plugin.register_output('rewrite_tag_filter', self)
 
-  helpers :event_emitter
+  helpers :event_emitter, :record_accessor
 
   desc 'Capitalize letter for every matched regex backreference.'
   config_param :capitalize_regex_backreference, :bool, :default => false
@@ -31,7 +31,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
         raise Fluent::ConfigError, "${tag_parts[n]} and __TAG_PARTS[n]__ placeholder does not support range specify at #{key} #{conf[key]}"
       end
 
-      @rewriterules.push([rewritekey, /#{trim_regex_quote(regexp)}/, get_match_operator(regexp), rewritetag])
+      @rewriterules.push([record_accessor_create(rewritekey), /#{trim_regex_quote(regexp)}/, get_match_operator(regexp), rewritetag])
       rewriterule_names.push(rewritekey + regexp)
       log.info "adding rewrite_tag_filter rule: #{key} #{@rewriterules.last}"
     end
@@ -63,8 +63,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
   def rewrite_tag(tag, record)
     placeholder = get_placeholder(tag)
-    @rewriterules.each do |rewritekey, regexp, match_operator, rewritetag|
-      rewritevalue = record[rewritekey].to_s
+    @rewriterules.each do |record_accessor, regexp, match_operator, rewritetag|
+      rewritevalue = record_accessor.call(record).to_s
       next if rewritevalue.empty? && match_operator != MATCH_OPERATOR_EXCLUDE
       last_match = regexp_last_match(regexp, rewritevalue)
       case match_operator
