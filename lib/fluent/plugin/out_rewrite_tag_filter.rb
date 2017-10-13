@@ -12,6 +12,17 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   desc 'Override hostname command for placeholder.'
   config_param :hostname_command, :string, :default => 'hostname'
 
+  config_section :rule, param_name: :rules, multi: true do
+    desc "The field name to which the regular expression is applied"
+    config_param :key, :string
+    desc "The regular expression"
+    config_param :pattern do |value|
+      Regexp.compile(value)
+    end
+    desc "New tag"
+    config_param :tag, :string
+  end
+
   MATCH_OPERATOR_EXCLUDE = '!'
 
   def configure(conf)
@@ -20,6 +31,14 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     @rewriterules = []
     rewriterule_names = []
     @hostname = `#{@hostname_command}`.chomp
+
+    @rules.each do |rule|
+      unless rule.tag.match(/\$\{tag_parts\[\d\.\.\.?\d\]\}/).nil? or rule.tag.match(/__TAG_PARTS\[\d\.\.\.?\d\]__/).nil?
+        raise Fluent::ConfigError, "${tag_parts[n]} and __TAG_PARTS[n]__ placeholder does not support range specify at #{rule}"
+      end
+      @rewriterules.push([record_accessor_create(rule.key), rule.pattern, "", rule.tag])
+      rewriterule_names.push(rule.key + rule.pattern.to_s)
+    end
 
     conf.keys.select{|k| k =~ /^rewriterule(\d+)$/}.sort_by{|i| i.sub('rewriterule', '').to_i}.each do |key|
       rewritekey,regexp,rewritetag = parse_rewriterule(conf[key])
