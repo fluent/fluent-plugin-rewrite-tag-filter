@@ -93,6 +93,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     end
   end
 
+  sub_test_case "line style config" do
   def test_emit
     d1 = create_driver(CONFIG)
     d1.run(default_tag: "input.access") do
@@ -250,5 +251,6 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     end
     events = d.events
     assert_equal "com.example", events[0][0]
+  end
   end
 end
