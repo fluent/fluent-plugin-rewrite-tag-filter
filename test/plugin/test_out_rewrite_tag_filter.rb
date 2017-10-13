@@ -94,7 +94,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
   end
 
   sub_test_case "line style config" do
-    def test_emit
+    test "emit simple" do
       d1 = create_driver(CONFIG)
       d1.run(default_tag: "input.access") do
         d1.feed({'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
@@ -114,7 +114,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal 'site.input.access.tagtest', events[4][0] #tag
     end
 
-    def test_emit2_indent_and_capitalize_option
+    test "indent and capitalize option" do
       d1 = create_driver(CONFIG_INDENT_SPACE_AND_CAPITALIZE_OPTION)
       d1.run(default_tag: "input.access") do
         d1.feed({'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
@@ -131,7 +131,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal 'agent.Googlebot-Foobar', events[3][0] #tag
     end
 
-    def test_emit3_remove_tag_prefix
+    test "remove_tag_prefix" do
       d1 = create_driver(CONFIG_REMOVE_TAG_PREFIX)
       d1.run(default_tag: "input.access") do
         d1.feed({'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
@@ -141,7 +141,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal 'access', events[0][0] # tag
     end
 
-    def test_emit4_remove_tag_prefix_with_dot
+    test "remove_tag_prefix with dot" do
       d1 = create_driver(CONFIG_REMOVE_TAG_PREFIX_WITH_DOT)
       d1.run(default_tag: "input.access") do
         d1.feed({'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
@@ -151,7 +151,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal 'access', events[0][0] # tag
     end
 
-    def test_emit5_short_hostname
+    test "short_hostname" do
       d1 = create_driver(CONFIG_SHORT_HOSTNAME)
       d1.run(default_tag: "input.access") do
         d1.feed({'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
@@ -161,7 +161,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal `hostname -s`.chomp, events[0][0] # tag
     end
 
-    def test_emit6_non_matching
+    test "non_matching" do
       d1 = create_driver(CONFIG_NON_MATCHING)
       d1.run(default_tag: "input.access") do
         d1.feed({'domain' => 'www.google.com'})
@@ -175,7 +175,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal 'not_start_with_www', events[2][0] # tag
     end
 
-    def test_emit7_jump_index
+    test "jump_index" do
       d1 = create_driver(CONFIG_JUMP_INDEX)
       d1.run(default_tag: "input.access") do
         d1.feed({'domain' => 'www.google.com', 'path' => '/', 'agent' => 'Googlebot', 'response_time' => 1000000})
@@ -187,7 +187,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal 'site.GoogleNews', events[1][0] # tag
     end
 
-    def test_emit8_split_by_tag
+    test "split_by_tag" do
       d1 = create_driver(CONFIG_SPLIT_BY_TAG)
       d1.run(default_tag: "game.production.api") do
         d1.feed({'user_id' => '10000', 'world' => 'chaos', 'user_name' => 'gamagoori'})
@@ -205,7 +205,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal 'api.game.production', events[4][0]
     end
 
-    def test_emit9_invalid_byte
+    test "invalid_byte (UTF-8)" do
       invalid_utf8 = "\xff".force_encoding('UTF-8')
       d1 = create_driver(CONFIG_INVALID_BYTE)
       d1.run(default_tag: "input.activity") do
@@ -215,7 +215,9 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal 1, events.length
       assert_equal "app.?", events[0][0]
       assert_equal invalid_utf8, events[0][2]['client_name']
+    end
 
+    test "invalid byte (US-ASCII)" do
       invalid_ascii = "\xff".force_encoding('US-ASCII')
       d1 = create_driver(CONFIG_INVALID_BYTE)
       d1.run(default_tag: "input.activity") do
@@ -227,7 +229,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal invalid_ascii, events[0][2]['client_name']
     end
 
-    def test_nested_key_support_with_dot_notation
+    test "nested key support with dot notation" do
       conf = %[
         rewriterule1 $.email.domain ^(example)\.(com)$ $2.$1
       ]
@@ -240,7 +242,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal "com.example", events[0][0]
     end
 
-    def test_nested_key_support_with_bracket_notation
+    test "nested key support with bracket notation" do
       conf = %[
         rewriterule1 $['email']['domain'] ^(example)\.(com)$ $2.$1
       ]
