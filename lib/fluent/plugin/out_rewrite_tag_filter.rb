@@ -102,7 +102,6 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
   end
 
   def regexp_last_match(regexp, rewritevalue)
-    return if regexp.nil?
     if rewritevalue.valid_encoding?
       regexp.match(rewritevalue)
     else
