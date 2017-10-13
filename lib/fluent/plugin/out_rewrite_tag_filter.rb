@@ -65,7 +65,6 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     placeholder = get_placeholder(tag)
     @rewriterules.each do |rewritekey, regexp, match_operator, rewritetag|
       rewritevalue = record[rewritekey].to_s
-      next if rewritevalue.empty? && match_operator != MATCH_OPERATOR_EXCLUDE
       last_match = regexp_last_match(regexp, rewritevalue)
       case match_operator
       when MATCH_OPERATOR_EXCLUDE
