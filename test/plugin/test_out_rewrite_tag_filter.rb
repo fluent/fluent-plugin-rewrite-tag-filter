@@ -75,19 +75,19 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
   sub_test_case "configure" do
     def test_configure
       assert_raise(Fluent::ConfigError) {
-        d = create_driver('')
+        create_driver('')
       }
       assert_raise(Fluent::ConfigError) {
-        d = create_driver('rewriterule1 foo')
+        create_driver('rewriterule1 foo')
       }
       assert_raise(Fluent::ConfigError) {
-        d = create_driver('rewriterule1 foo foo')
+        create_driver('rewriterule1 foo foo')
       }
       assert_raise(Fluent::ConfigError) {
-        d = create_driver('rewriterule1 hoge hoge.${tag_parts[0..2]}.__TAG_PARTS[0..2]__')
+        create_driver('rewriterule1 hoge hoge.${tag_parts[0..2]}.__TAG_PARTS[0..2]__')
       }
       assert_raise(Fluent::ConfigError) {
-        d = create_driver('rewriterule1 fuga fuga.${tag_parts[1...2]}.__TAG_PARTS[1...2]__')
+        create_driver('rewriterule1 fuga fuga.${tag_parts[1...2]}.__TAG_PARTS[1...2]__')
       }
       d = create_driver %[
         rewriterule1 domain ^www.google.com$ site.Google
