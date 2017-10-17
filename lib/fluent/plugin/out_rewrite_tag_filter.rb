@@ -62,6 +62,11 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
       rewriterule_names.push(rule.key + invert + rule.pattern.to_s)
     end
 
+    deprecated_rewriterule = conf.keys.detect {|k| k =~ /^rewriterule(\d+)$/ }
+    if deprecated_rewriterule
+      k = deprecated_rewriterule.split(" ").first
+      log.warn "rewrite_tag_filter: [DEPRECATED] Use <rule> section instead of #{k}"
+    end
     conf.keys.select{|k| k =~ /^rewriterule(\d+)$/}.sort_by{|i| i.sub('rewriterule', '').to_i}.each do |key|
       rewritekey,regexp,rewritetag = parse_rewriterule(conf[key])
       if regexp.nil? || rewritetag.nil?
