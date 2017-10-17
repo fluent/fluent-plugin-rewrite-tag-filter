@@ -116,6 +116,39 @@ $ tailf /var/log/td-agent/td-agent.log
 2012-09-16 18:10:51 +0900: adding rewrite_tag_filter rule: [5, "domain", /.+/, "site.unmatched"]
 ```
 
+### Nested attributes
+
+You can handle nested attributes using [filter_record_transformer](https://docs.fluentd.org/v0.14/articles/filter_record_transformer).
+
+```
+<filter kubernetes.**>
+  @type kubernetes_metadata
+</filter>
+<filter kubernetes.**>
+  @type record_transformer
+  enable_ruby
+  <record>
+    kubernetes_namespace ${record["kubernetes"]["namespace"]}
+  </record>
+</filter>
+<match kubernetes.**>
+  @type rewrite_tag_filter
+  rewriterule1 kubernetes_namespace (.+) $1.${tag}
+</match>
+```
+
+```
+{
+  "kubernetes": {
+    "namespace": "default"
+  }
+}
+```
+
+When original tag is `kubernetes.var.log`, this will be converted to `default.kubernetes.var.log`
+
+See also #13.
+
 ### Tag placeholder
 
 It is supported these placeholder for new_tag (rewrited tag).
