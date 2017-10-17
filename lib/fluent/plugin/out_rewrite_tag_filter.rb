@@ -21,6 +21,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     end
     desc "New tag"
     config_param :tag, :string
+    # Hidden option
+    config_param :invert, :bool, default: false
   end
 
   MATCH_OPERATOR_EXCLUDE = '!'
@@ -36,8 +38,10 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       unless rule.tag.match(/\$\{tag_parts\[\d\.\.\.?\d\]\}/).nil? or rule.tag.match(/__TAG_PARTS\[\d\.\.\.?\d\]__/).nil?
         raise Fluent::ConfigError, "${tag_parts[n]} and __TAG_PARTS[n]__ placeholder does not support range specify at #{rule}"
       end
-      @rewriterules.push([record_accessor_create(rule.key), rule.pattern, "", rule.tag])
-      rewriterule_names.push(rule.key + rule.pattern.to_s)
+
+      invert = rule.invert ? MATCH_OPERATOR_EXCLUDE : ""
+      @rewriterules.push([record_accessor_create(rule.key), rule.pattern, invert, rule.tag])
+      rewriterule_names.push(rule.key + invert + rule.pattern.to_s)
     end
 
     conf.keys.select{|k| k =~ /^rewriterule(\d+)$/}.sort_by{|i| i.sub('rewriterule', '').to_i}.each do |key|
