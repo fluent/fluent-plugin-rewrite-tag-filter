@@ -226,7 +226,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     assert_equal invalid_ascii, events[0][2]['client_name']
   end
 
-  def test_nested_key_support_with_dot_style
+  def test_nested_key_support_with_dot_notation
     conf = %[
       rewriterule1 $.email.domain ^(example)\.(com)$ $2.$1
     ]
@@ -239,7 +239,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     assert_equal "com.example", events[0][0]
   end
 
-  def test_nested_key_support_with_bracket_style
+  def test_nested_key_support_with_bracket_notation
     conf = %[
       rewriterule1 $['email']['domain'] ^(example)\.(com)$ $2.$1
     ]
