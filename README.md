@@ -125,6 +125,38 @@ $ tailf /var/log/td-agent/td-agent.log
 2012-09-16 18:10:51 +0900: adding rewrite_tag_filter rule: [5, "domain", /.+/, "site.unmatched"]
 ```
 
+### Nested attributes
+
+Dot notation:
+
+```
+<match kubernetes.**>
+  @type rewrite_tag_filter
+  rewriterule1 $.kubernetes.namespace_name ^(.+)$ $1.${tag}
+</match>
+```
+
+Bracket notation:
+
+```
+<match kubernetes.**>
+  @type rewrite_tag_filter
+  rewriterule1 $['kubernetes']['namespace_name'] ^(.+)$ $1.${tag}
+</match>
+```
+
+These example configurations can process nested attributes like following:
+
+```
+{
+  "kubernetes": {
+    "namespace_name": "default"
+  }
+}
+```
+
+When original tag is `kubernetes.var.log`, this will be converted to `default.kubernetes.var.log`.
+
 ### Tag placeholder
 
 It is supported these placeholder for new_tag (rewrited tag).
