@@ -45,7 +45,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     end
 
     conf.keys.select{|k| k =~ /^rewriterule(\d+)$/}.sort_by{|i| i.sub('rewriterule', '').to_i}.each do |key|
-      rewritekey,regexp,rewritetag = parse_rewriterule(conf[key])
+      rewritekey, regexp, rewritetag = parse_rewriterule(conf[key])
       if regexp.nil? || rewritetag.nil?
         raise Fluent::ConfigError, "failed to parse rewriterules at #{key} #{conf[key]}"
       end
