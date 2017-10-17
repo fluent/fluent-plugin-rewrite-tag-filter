@@ -53,9 +53,9 @@ It's a sample to exclude some static file log before split tag by domain.
 </source>
 
 # "capitalize_regex_backreference yes" affects converting every matched first letter of backreference to upper case. ex: maps -> Maps
-# At rewriterule2, redirect to tag named "clear" which unmatched for status code 200.
-# At rewriterule3, redirect to tag named "clear" which is not end with ".com"
-# At rewriterule6, "site.$2$1" to be "site.ExampleMail" by capitalize_regex_backreference option.
+# At 2nd <rule>, redirect to tag named "clear" which unmatched for status code 200.
+# At 3rd <rule>, redirect to tag named "clear" which is not end with ".com"
+# At 6th <rule>, "site.$2$1" to be "site.ExampleMail" by capitalize_regex_backreference option.
 <match td.apache.access>
   @type rewrite_tag_filter
   capitalize_regex_backreference yes
@@ -66,13 +66,15 @@ It's a sample to exclude some static file log before split tag by domain.
   </rule>
   <rule>
     key     status
-    pattern !^200$
+    pattern ^200$
     tag     clear
+    invert  true
   </rule>
   <rule>
     key     domain
-    pattern !^.+\.com$
+    pattern ^.+\.com$
     tag     clear
+    invert  true
   </rule>
   <rule>
     key     domain
