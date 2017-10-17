@@ -133,14 +133,14 @@ You can handle nested attributes using [filter_record_transformer](https://docs.
 </filter>
 <match kubernetes.**>
   @type rewrite_tag_filter
-  rewriterule1 namespace (.+) $1.${tag}
+  rewriterule1 kubernetes_namespace (.+) $1.${tag}
 </match>
 ```
 
 ```
 {
   "kubernetes": {
-    "namespace_name": "default"
+    "namespace": "default"
   }
 }
 ```
