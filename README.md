@@ -24,24 +24,19 @@ $ sudo td-agent-gem install fluent-plugin-rewrite-tag-filter -v 1.5.6
 
 ## Configuration
 
-### Syntax
+* **rewriterule<num>** (string) (optional) <attribute> <regex_pattern> <new_tag>
+  * Deprecated: Use <rule> section
+* **capitalize_regex_backreference** (bool) (optional): Capitalize letter for every matched regex backreference. (ex: maps -> Maps) for more details, see usage.
+  * Default value: no
+* **remove_tag_prefix** (string) (optional): Remove tag prefix for tag placeholder. (see the section of "Tag placeholder")
+* **hostname_command** (string) (optional): Override hostname command for placeholder. (see the section of "Tag placeholder")
+  * Default value: `hostname`.
 
-```
-rewriterule<num> <attribute> <regex_pattern> <new_tag>
+### \<rule\> section (optional) (multiple)
 
-# Optional: Capitalize letter for every matched regex backreference. (ex: maps -> Maps)
-# for more details, see usage.
-capitalize_regex_backreference <yes/no> (default no)
-
-# Optional: remove tag prefix for tag placeholder. (see the section of "Tag placeholder")
-remove_tag_prefix <string>
-
-# Optional: override hostname command for placeholder. (see the section of "Tag placeholder")
-hostname_command <string>
-
-# Optional: Set log level for this plugin. (ex: trace, debug, info, warn, error, fatal)
-log_level        <string> (default info)
-```
+* **key** (string) (required): The field name to which the regular expression is applied
+* **pattern** (regexp) (required): The regular expression
+* **tag** (string) (required): New tag
 
 ### Usage
 
@@ -64,13 +59,41 @@ It's a sample to exclude some static file log before split tag by domain.
 <match td.apache.access>
   @type rewrite_tag_filter
   capitalize_regex_backreference yes
-  rewriterule1 path   \.(gif|jpe?g|png|pdf|zip)$  clear
-  rewriterule2 status !^200$                      clear
-  rewriterule3 domain !^.+\.com$                  clear
-  rewriterule4 domain ^maps\.example\.com$        site.ExampleMaps
-  rewriterule5 domain ^news\.example\.com$        site.ExampleNews
-  rewriterule6 domain ^(mail)\.(example)\.com$    site.$2$1
-  rewriterule7 domain .+                          site.unmatched
+  <rule>
+    key     path
+    pattern \.(gif|jpe?g|png|pdf|zip)$
+    tag clear
+  </rule>
+  <rule>
+    key     status
+    pattern !^200$
+    tag     clear
+  </rule>
+  <rule>
+    key     domain
+    pattern !^.+\.com$
+    tag     clear
+  </rule>
+  <rule>
+    key     domain
+    pattern ^maps\.example\.com$
+    tag     site.ExampleMaps
+  </rule>
+  <rule>
+    key     domain
+    pattern ^news\.example\.com$
+    tag     site.ExampleNews
+  </rule>
+  <rule>
+    key     domain
+    pattern ^(mail)\.(example)\.com$
+    tag     site.$2$1
+  </rule>
+  <rule>
+    key     domain
+    pattern .+
+    tag     site.unmatched
+  </rule>
 </match>
 
 <match site.*>
@@ -152,27 +175,43 @@ It's a sample to rewrite a tag with placeholder.
 # It will get "rewrited.access.ExampleMail"
 <match apache.access>
   @type rewrite_tag_filter
-  rewriterule1  domain  ^(mail)\.(example)\.com$  rewrited.${tag}.$2$1
   remove_tag_prefix apache
+  <rule>
+    key     domain
+    pattern ^(mail)\.(example)\.com$
+    tag     rewrited.${tag}.$2$1
+  </rule>
 </match>
 
 # It will get "rewrited.ExampleMail.app30-124.foo.com" when hostname is "app30-124.foo.com"
 <match apache.access>
   @type rewrite_tag_filter
-  rewriterule1  domain  ^(mail)\.(example)\.com$  rewrited.$2$1.${hostname}
+  <rule>
+    key     domain
+    pattern ^(mail)\.(example)\.com$
+    tag     rewrited.$2$1.${hostname}
+  </rule>
 </match>
 
 # It will get "rewrited.ExampleMail.app30-124" when hostname is "app30-124.foo.com"
 <match apache.access>
   @type rewrite_tag_filter
-  rewriterule1  domain  ^(mail)\.(example)\.com$  rewrited.$2$1.${hostname}
   hostname_command hostname -s
+  <rule>
+    key     domain
+    pattern ^(mail)\.(example)\.com$
+    tag     rewrited.$2$1.${hostname}
+  </rule>
 </match>
 
 # It will get "rewrited.game.pool"
 <match app.game.pool.activity>
   @type rewrite_tag_filter
-  rewriterule1  domain  ^.+$  rewrited.${tag_parts[1]}.${tag_parts[2]}
+  <rule>
+    key     domain
+    pattern ^.+$
+    tag     rewrited.${tag_parts[1]}.${tag_parts[2]}
+  </rule>
 </match>
 ```
 
