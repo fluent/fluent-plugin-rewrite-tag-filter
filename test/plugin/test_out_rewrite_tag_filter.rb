@@ -68,7 +68,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     rewriterule1 client_name (.+) app.$1
   ]
 
-  def create_driver(conf=CONFIG,tag='test')
+  def create_driver(conf, tag = 'test')
     Fluent::Test::OutputTestDriver.new(Fluent::RewriteTagFilterOutput, tag).configure(conf)
   end
 
