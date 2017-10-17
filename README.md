@@ -24,8 +24,8 @@ $ sudo td-agent-gem install fluent-plugin-rewrite-tag-filter -v 1.5.6
 
 ## Configuration
 
-* **rewriterule<num>** (string) (optional) <attribute> <regex_pattern> <new_tag>
-  * Deprecated: Use <rule> section
+* **rewriterule\<num\>** (string) (optional) \<attribute\> \<regex_pattern\> \<new_tag\>
+  * Deprecated: Use \<rule\> section
 * **capitalize_regex_backreference** (bool) (optional): Capitalize letter for every matched regex backreference. (ex: maps -> Maps) for more details, see usage.
   * Default value: no
 * **remove_tag_prefix** (string) (optional): Remove tag prefix for tag placeholder. (see the section of "Tag placeholder")
