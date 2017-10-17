@@ -94,6 +94,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     end
   end
 
+  sub_test_case "line style config" do
   def test_emit
     d1 = create_driver(CONFIG, 'input.access')
     d1.run do
@@ -225,5 +226,6 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     assert_equal 1, emits.length
     assert_equal "app.?", emits[0][0]
     assert_equal invalid_ascii, emits[0][2]['client_name']
+  end
   end
 end
