@@ -37,6 +37,7 @@ $ sudo td-agent-gem install fluent-plugin-rewrite-tag-filter -v 1.5.6
 * **key** (string) (required): The field name to which the regular expression is applied
 * **pattern** (regexp) (required): The regular expression
 * **tag** (string) (required): New tag
+* **invert** (bool) (optional): If true, rewrite tag when unmatched pattern
 
 ### Usage
 

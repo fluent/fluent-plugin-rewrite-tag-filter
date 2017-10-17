@@ -30,7 +30,7 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     end
     desc "New tag"
     config_param :tag, :string
-    # Hidden param
+    desc "If true, rewrite tag when unmatched pattern"
     config_param :invert, :bool, :default => false
   end
 
