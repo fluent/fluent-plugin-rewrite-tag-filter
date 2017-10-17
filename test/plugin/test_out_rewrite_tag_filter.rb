@@ -72,6 +72,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     Fluent::Test::OutputTestDriver.new(Fluent::RewriteTagFilterOutput, tag).configure(conf)
   end
 
+  sub_test_case "configure" do
   def test_configure
     assert_raise(Fluent::ConfigError) {
       d = create_driver('')
@@ -94,6 +95,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     ]
     assert_equal 'domain ^www.google.com$ site.Google', d.instance.config['rewriterule1']
     assert_equal 'domain ^news.google.com$ site.GoogleNews', d.instance.config['rewriterule2']
+  end
   end
 
   def test_emit
