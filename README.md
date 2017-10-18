@@ -33,24 +33,21 @@ $ sudo td-agent-gem install fluent-plugin-rewrite-tag-filter -v 1.5.6
 
 ## Configuration
 
-### Syntax
+* **rewriterule\<num\>** (string) (optional) \<attribute\> \<regex_pattern\> \<new_tag\>
+  * Deprecated: Use <rule> section
+* **capitalize_regex_backreference** (bool) (optional): Capitalize letter for every matched regex backreference. (ex: maps -> Maps) for more details, see usage.
+  * Default value: no
+* **remove_tag_prefix** (string) (optional): Remove tag prefix for tag placeholder. (see the section of "Tag placeholder")
+* **hostname_command** (string) (optional): Override hostname command for placeholder. (see the section of "Tag placeholder")
+  * Default value: `hostname`.
 
-```
-rewriterule<num> <attribute> <regex_pattern> <new_tag>
+### \<rule\> section (optional) (multiple)
 
-# Optional: Capitalize letter for every matched regex backreference. (ex: maps -> Maps)
-# for more details, see usage.
-capitalize_regex_backreference <yes/no> (default no)
-
-# Optional: remove tag prefix for tag placeholder. (see the section of "Tag placeholder")
-remove_tag_prefix <string>
-
-# Optional: override hostname command for placeholder. (see the section of "Tag placeholder")
-hostname_command <string>
-
-# Optional: Set log level for this plugin. (ex: trace, debug, info, warn, error, fatal)
-log_level        <string> (default info)
-```
+* **key** (string) (required): The field name to which the regular expression is applied
+* **pattern** (regexp) (required): The regular expression
+* **tag** (string) (required): New tag
+* **invert** (bool) (optional): If true, rewrite tag when unmatch pattern
+  * Default value: `false`
 
 ### Usage
 
