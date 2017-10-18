@@ -45,6 +45,10 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       log.info "adding rewrite_tag_filter rule: #{rule.key} #{@rewriterules.last}"
     end
 
+    if conf.keys.any? {|k| k.start_with?("rewriterule") }
+      raise Fluent::ConfigError, "\"rewriterule<num>\" support has been dropped. Use <rule> section instead."
+    end
+
     unless @rewriterules.length > 0
       raise Fluent::ConfigError, "missing rewriterules"
     end
