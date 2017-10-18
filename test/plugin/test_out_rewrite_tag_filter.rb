@@ -261,30 +261,4 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal "com.example", events[0][0]
     end
   end
-
-  def test_nested_key_support_with_dot_notation
-    conf = %[
-      rewriterule1 $.email.domain ^(example)\.(com)$ $2.$1
-    ]
-    d = create_driver(conf)
-    d.run(default_tag: "input") do
-      d.feed({ "email" => { "localpart" => "john", "domain" => "example.com" }})
-      d.feed({ "email" => { "localpart" => "doe", "domain" => "example.jp" }})
-    end
-    events = d.events
-    assert_equal "com.example", events[0][0]
-  end
-
-  def test_nested_key_support_with_bracket_notation
-    conf = %[
-      rewriterule1 $['email']['domain'] ^(example)\.(com)$ $2.$1
-    ]
-    d = create_driver(conf)
-    d.run(default_tag: "input") do
-      d.feed({ "email" => { "localpart" => "john", "domain" => "example.com" }})
-      d.feed({ "email" => { "localpart" => "doe", "domain" => "example.jp" }})
-    end
-    events = d.events
-    assert_equal "com.example", events[0][0]
-  end
 end
