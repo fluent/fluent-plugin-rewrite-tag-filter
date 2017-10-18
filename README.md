@@ -64,19 +64,49 @@ It's a sample to exclude some static file log before split tag by domain.
 </source>
 
 # "capitalize_regex_backreference yes" affects converting every matched first letter of backreference to upper case. ex: maps -> Maps
-# At rewriterule2, redirect to tag named "clear" which unmatched for status code 200.
-# At rewriterule3, redirect to tag named "clear" which is not end with ".com"
-# At rewriterule6, "site.$2$1" to be "site.ExampleMail" by capitalize_regex_backreference option.
+# At 2nd <rule>, redirect to tag named "clear" which unmatched for status code 200.
+# At 3rd <rule>, redirect to tag named "clear" which is not end with ".com"
+# At 6th <rule>, "site.$2$1" to be "site.ExampleMail" by capitalize_regex_backreference option.
 <match td.apache.access>
   @type rewrite_tag_filter
   capitalize_regex_backreference yes
-  rewriterule1 path   \.(gif|jpe?g|png|pdf|zip)$  clear
-  rewriterule2 status !^200$                      clear
-  rewriterule3 domain !^.+\.com$                  clear
-  rewriterule4 domain ^maps\.example\.com$        site.ExampleMaps
-  rewriterule5 domain ^news\.example\.com$        site.ExampleNews
-  rewriterule6 domain ^(mail)\.(example)\.com$    site.$2$1
-  rewriterule7 domain .+                          site.unmatched
+  <rule>
+    key     path
+    pattern \.(gif|jpe?g|png|pdf|zip)$
+    tag clear
+  </rule>
+  <rule>
+    key     status
+    pattern ^200$
+    tag     clear
+    invert  true
+  </rule>
+  <rule>
+    key     domain
+    pattern ^.+\.com$
+    tag     clear
+    invert  true
+  </rule>
+  <rule>
+    key     domain
+    pattern ^maps\.example\.com$
+    tag     site.ExampleMaps
+  </rule>
+  <rule>
+    key     domain
+    pattern ^news\.example\.com$
+    tag     site.ExampleNews
+  </rule>
+  <rule>
+    key     domain
+    pattern ^(mail)\.(example)\.com$
+    tag     site.$2$1
+  </rule>
+  <rule>
+    key     domain
+    pattern .+
+    tag     site.unmatched
+  </rule>
 </match>
 
 <match site.*>
@@ -190,27 +220,43 @@ It's a sample to rewrite a tag with placeholder.
 # It will get "rewrited.access.ExampleMail"
 <match apache.access>
   @type rewrite_tag_filter
-  rewriterule1  domain  ^(mail)\.(example)\.com$  rewrited.${tag}.$2$1
   remove_tag_prefix apache
+  <rule>
+    key     domain
+    pattern ^(mail)\.(example)\.com$
+    tag     rewrited.${tag}.$2$1
+  </rule>
 </match>
 
 # It will get "rewrited.ExampleMail.app30-124.foo.com" when hostname is "app30-124.foo.com"
 <match apache.access>
   @type rewrite_tag_filter
-  rewriterule1  domain  ^(mail)\.(example)\.com$  rewrited.$2$1.${hostname}
+  <rule>
+    key     domain
+    pattern ^(mail)\.(example)\.com$
+    tag     rewrited.$2$1.${hostname}
+  </rule>
 </match>
 
 # It will get "rewrited.ExampleMail.app30-124" when hostname is "app30-124.foo.com"
 <match apache.access>
   @type rewrite_tag_filter
-  rewriterule1  domain  ^(mail)\.(example)\.com$  rewrited.$2$1.${hostname}
   hostname_command hostname -s
+  <rule>
+    key     domain
+    pattern ^(mail)\.(example)\.com$
+    tag     rewrited.$2$1.${hostname}
+  </rule>
 </match>
 
 # It will get "rewrited.game.pool"
 <match app.game.pool.activity>
   @type rewrite_tag_filter
-  rewriterule1  domain  ^.+$  rewrited.${tag_parts[1]}.${tag_parts[2]}
+  <rule>
+    key     domain
+    pattern ^.+$
+    tag     rewrited.${tag_parts[1]}.${tag_parts[2]}
+  </rule>
 </match>
 ```
 
