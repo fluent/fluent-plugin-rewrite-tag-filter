@@ -21,7 +21,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     end
     desc "New tag"
     config_param :tag, :string
-    # Hidden option
+    desc "If true, rewrite tag when unmatch pattern"
     config_param :invert, :bool, default: false
   end
 
