@@ -45,21 +45,6 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       log.info "adding rewrite_tag_filter rule: #{rule.key} #{@rewriterules.last}"
     end
 
-    conf.keys.select{|k| k =~ /^rewriterule(\d+)$/}.sort_by{|i| i.sub('rewriterule', '').to_i}.each do |key|
-      rewritekey, regexp, rewritetag = parse_rewriterule(conf[key])
-      if regexp.nil? || rewritetag.nil?
-        raise Fluent::ConfigError, "failed to parse rewriterules at #{key} #{conf[key]}"
-      end
-
-      unless rewritetag.match(/\$\{tag_parts\[\d\.\.\.?\d\]\}/).nil? or rewritetag.match(/__TAG_PARTS\[\d\.\.\.?\d\]__/).nil?
-        raise Fluent::ConfigError, "${tag_parts[n]} and __TAG_PARTS[n]__ placeholder does not support range specify at #{key} #{conf[key]}"
-      end
-
-      @rewriterules.push([record_accessor_create(rewritekey), /#{trim_regex_quote(regexp)}/, get_match_operator(regexp), rewritetag])
-      rewriterule_names.push(rewritekey + regexp)
-      log.info "adding rewrite_tag_filter rule: #{key} #{@rewriterules.last}"
-    end
-
     unless @rewriterules.length > 0
       raise Fluent::ConfigError, "missing rewriterules"
     end
@@ -114,28 +99,6 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     else
       regexp.match(rewritevalue.scrub('?'))
     end
-  end
-
-  def parse_rewriterule(rule)
-    if m = rule.match(/^([^\s]+)\s+(.+?)\s+([^\s]+)$/)
-      return m.captures
-    end
-  end
-
-  def trim_regex_quote(regexp)
-    if regexp.start_with?('"') && regexp.end_with?('"')
-      log.info "rewrite_tag_filter: [DEPRECATED] Use ^....$ pattern for partial word match instead of double-quote-delimiter. #{regexp}"
-      regexp = regexp[1..-2]
-    end
-    if regexp.start_with?(MATCH_OPERATOR_EXCLUDE)
-      regexp = regexp[1, regexp.length]
-    end
-    return regexp
-  end
-
-  def get_match_operator(regexp)
-    return MATCH_OPERATOR_EXCLUDE if regexp.start_with?(MATCH_OPERATOR_EXCLUDE)
-    return ''
   end
 
   def get_backreference_table(elements)
