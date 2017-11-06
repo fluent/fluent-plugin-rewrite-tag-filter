@@ -14,8 +14,6 @@ user-agent, request-uri, regex-backreference and so on with regular expression.
 | >= 2.0.0                         | >= v0.14.2 | >= 2.1 |
 | < 2.0.0                          | >= v0.12.0 | >= 1.9 |
 
-NOTE: fluent-plugin-rewrite-tag-filter v2.0.0 is now RC. We will release stable v2.0.0 soon.
-
 ## Installation
 
 Install with `gem`, `fluent-gem` or `td-agent-gem` command as:
