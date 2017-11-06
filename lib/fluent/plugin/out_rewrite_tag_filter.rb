@@ -1,11 +1,6 @@
 class Fluent::RewriteTagFilterOutput < Fluent::Output
   Fluent::Plugin.register_output('rewrite_tag_filter', self)
 
-  # To support Fluentd v0.10.57 or earlier
-  unless method_defined?(:router)
-    define_method("router") { Fluent::Engine }
-  end
-
   # For fluentd v0.12.16 or earlier
   class << self
     unless method_defined?(:desc)
@@ -35,11 +30,6 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
   end
 
   MATCH_OPERATOR_EXCLUDE = '!'
-
-  # Define `log` method for v0.10.42 or earlier
-  unless method_defined?(:log)
-    define_method("log") { $log }
-  end
 
   def initialize
     super
