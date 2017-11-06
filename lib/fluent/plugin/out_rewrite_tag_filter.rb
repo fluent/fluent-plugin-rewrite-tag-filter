@@ -21,6 +21,19 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
   desc 'Override hostname command for placeholder.'
   config_param :hostname_command, :string, :default => 'hostname'
 
+  config_section :rule, :param_name => :rules, :multi => true do
+    desc "The field name to which the regular expression is applied"
+    config_param :key, :string
+    desc "The regular expression"
+    config_param :pattern do |value|
+      Regexp.compile(value)
+    end
+    desc "New tag"
+    config_param :tag, :string
+    desc "If true, rewrite tag when unmatched pattern"
+    config_param :invert, :bool, :default => false
+  end
+
   MATCH_OPERATOR_EXCLUDE = '!'
 
   # Define `log` method for v0.10.42 or earlier
@@ -40,6 +53,20 @@ class Fluent::RewriteTagFilterOutput < Fluent::Output
     rewriterule_names = []
     @hostname = `#{@hostname_command}`.chomp
 
+    @rules.each do |rule|
+      unless rule.tag.match(/\$\{tag_parts\[\d\.\.\.?\d\]\}/).nil? or rule.tag.match(/__TAG_PARTS\[\d\.\.\.?\d\]__/).nil?
+        raise Fluent::ConfigError, "${tag_parts[n]} and __TAG_PARTS[n]__ placeholder does not support range specify at #{rule}"
+      end
+      invert = rule.invert ? MATCH_OPERATOR_EXCLUDE : ""
+      @rewriterules.push([rule.key, rule.pattern, invert, rule.tag])
+      rewriterule_names.push(rule.key + invert + rule.pattern.to_s)
+    end
+
+    deprecated_rewriterule = conf.keys.detect {|k| k =~ /^rewriterule(\d+)$/ }
+    if deprecated_rewriterule
+      k = deprecated_rewriterule.split(" ").first
+      log.warn "rewrite_tag_filter: [DEPRECATED] Use <rule> section instead of #{k}"
+    end
     conf.keys.select{|k| k =~ /^rewriterule(\d+)$/}.sort_by{|i| i.sub('rewriterule', '').to_i}.each do |key|
       rewritekey,regexp,rewritetag = parse_rewriterule(conf[key])
       if regexp.nil? || rewritetag.nil?
