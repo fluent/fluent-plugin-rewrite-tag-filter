@@ -18,23 +18,25 @@ This is an output plugin because fluentd's `filter` doesn't allow tag rewrite.
 
 ## Installation
 
-Install with `gem`, `fluent-gem` or `td-agent-gem` command as:
+Install with `gem` or `td-agent-gem` command as:
 
 ```
 # for system installed fluentd
 $ gem install fluent-plugin-rewrite-tag-filter
 
-# for td-agent (Legacy)
-$ sudo /usr/lib64/fluent/ruby/bin/fluent-gem install fluent-plugin-rewrite-tag-filter -v 1.5.6
-
 # for td-agent2 (with fluentd v0.12)
-$ sudo td-agent-gem install fluent-plugin-rewrite-tag-filter -v 1.5.6
+$ sudo td-agent-gem install fluent-plugin-rewrite-tag-filter -v 1.6.0
+
+# for td-agent3 (with fluentd v0.14)
+$ sudo td-agent-gem install fluent-plugin-rewrite-tag-filter
 ```
+
+For more details, see [Plugin Management](https://docs.fluentd.org/v0.14/articles/plugin-management)
 
 ## Configuration
 
 * **rewriterule\<num\>** (string) (optional) \<attribute\> \<regex_pattern\> \<new_tag\>
-  * Deprecated: Use <rule> section
+  * Obsoleted: Use <rule> section
 * **capitalize_regex_backreference** (bool) (optional): Capitalize letter for every matched regex backreference. (ex: maps -> Maps) for more details, see usage.
   * Default value: no
 * **remove_tag_prefix** (string) (optional): Remove tag prefix for tag placeholder. (see the section of "Tag placeholder")
