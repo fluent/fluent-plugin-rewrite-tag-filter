@@ -31,6 +31,8 @@ $ sudo /usr/lib64/fluent/ruby/bin/fluent-gem install fluent-plugin-rewrite-tag-f
 $ sudo td-agent-gem install fluent-plugin-rewrite-tag-filter -v 1.5.6
 ```
 
+For more details, see [Plugin Management](https://docs.fluentd.org/v0.14/articles/plugin-management)
+
 ## Configuration
 
 * **rewriterule\<num\>** (string) (optional) \<attribute\> \<regex_pattern\> \<new_tag\>
