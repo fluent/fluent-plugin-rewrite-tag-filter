@@ -67,15 +67,15 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   end
 
   def process(tag, es)
+    placeholder = get_placeholder(tag)
     es.each do |time, record|
-      rewrited_tag = rewrite_tag(tag, record)
+      rewrited_tag = rewrite_tag(tag, record, placeholder)
       next if rewrited_tag.nil? || tag == rewrited_tag
       router.emit(rewrited_tag, time, record)
     end
   end
 
-  def rewrite_tag(tag, record)
-    placeholder = get_placeholder(tag)
+  def rewrite_tag(tag, record, placeholder)
     @rewriterules.each do |record_accessor, regexp, match_operator, rewritetag|
       rewritevalue = record_accessor.call(record).to_s
       next if rewritevalue.empty? && match_operator != MATCH_OPERATOR_EXCLUDE
