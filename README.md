@@ -46,7 +46,9 @@ For more details, see [Plugin Management](https://docs.fluentd.org/v0.14/article
 ### \<rule\> section (optional) (multiple)
 
 * **key** (string) (required): The field name to which the regular expression is applied
-* **pattern** (regexp) (required): The regular expression
+* **pattern** (regexp) (required): The regular expression.
+  `/regexp/` is preferred because `/regexp/` style can support character classes such as `/[a-z]/`.
+  The pattern without slashes will cause errors if you use patterns start with character classes.
 * **tag** (string) (required): New tag
 * **invert** (bool) (optional): If true, rewrite tag when unmatch pattern
   * Default value: `false`
