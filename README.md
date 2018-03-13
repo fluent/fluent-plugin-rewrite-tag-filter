@@ -74,39 +74,39 @@ It's a sample to exclude some static file log before split tag by domain.
   capitalize_regex_backreference yes
   <rule>
     key     path
-    pattern \.(gif|jpe?g|png|pdf|zip)$
+    pattern /\.(gif|jpe?g|png|pdf|zip)$/
     tag clear
   </rule>
   <rule>
     key     status
-    pattern ^200$
+    pattern /^200$/
     tag     clear
     invert  true
   </rule>
   <rule>
     key     domain
-    pattern ^.+\.com$
+    pattern /^.+\.com$/
     tag     clear
     invert  true
   </rule>
   <rule>
     key     domain
-    pattern ^maps\.example\.com$
+    pattern /^maps\.example\.com$/
     tag     site.ExampleMaps
   </rule>
   <rule>
     key     domain
-    pattern ^news\.example\.com$
+    pattern /^news\.example\.com$/
     tag     site.ExampleNews
   </rule>
   <rule>
     key     domain
-    pattern ^(mail)\.(example)\.com$
+    pattern /^(mail)\.(example)\.com$/
     tag     site.$2$1
   </rule>
   <rule>
     key     domain
-    pattern .+
+    pattern /.+/
     tag     site.unmatched
   </rule>
 </match>
