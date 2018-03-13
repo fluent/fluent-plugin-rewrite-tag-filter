@@ -161,7 +161,11 @@ Dot notation:
 ```
 <match kubernetes.**>
   @type rewrite_tag_filter
-  rewriterule1 $.kubernetes.namespace_name ^(.+)$ $1.${tag}
+  <rule>
+    key $.kubernetes.namespace_name
+    pattern ^(.+)$
+    tag $1.${tag}
+  </rule>
 </match>
 ```
 
@@ -170,7 +174,11 @@ Bracket notation:
 ```
 <match kubernetes.**>
   @type rewrite_tag_filter
-  rewriterule1 $['kubernetes']['namespace_name'] ^(.+)$ $1.${tag}
+  <rule>
+    key $['kubernetes']['namespace_name']
+    pattern ^(.+)$
+    tag $1.${tag}
+  </rule>
 </match>
 ```
 
