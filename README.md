@@ -46,7 +46,9 @@ For more details, see [Plugin Management](https://docs.fluentd.org/v0.14/article
 ### \<rule\> section (optional) (multiple)
 
 * **key** (string) (required): The field name to which the regular expression is applied
-* **pattern** (regexp) (required): The regular expression
+* **pattern** (regexp) (required): The regular expression.
+  `/regexp/` is preferred because `/regexp/` style can support character classes such as `/[a-z]/`.
+  The pattern without slashes will cause errors if you use patterns start with character classes.
 * **tag** (string) (required): New tag
 * **invert** (bool) (optional): If true, rewrite tag when unmatch pattern
   * Default value: `false`
@@ -74,39 +76,39 @@ It's a sample to exclude some static file log before split tag by domain.
   capitalize_regex_backreference yes
   <rule>
     key     path
-    pattern \.(gif|jpe?g|png|pdf|zip)$
+    pattern /\.(gif|jpe?g|png|pdf|zip)$/
     tag clear
   </rule>
   <rule>
     key     status
-    pattern ^200$
+    pattern /^200$/
     tag     clear
     invert  true
   </rule>
   <rule>
     key     domain
-    pattern ^.+\.com$
+    pattern /^.+\.com$/
     tag     clear
     invert  true
   </rule>
   <rule>
     key     domain
-    pattern ^maps\.example\.com$
+    pattern /^maps\.example\.com$/
     tag     site.ExampleMaps
   </rule>
   <rule>
     key     domain
-    pattern ^news\.example\.com$
+    pattern /^news\.example\.com$/
     tag     site.ExampleNews
   </rule>
   <rule>
     key     domain
-    pattern ^(mail)\.(example)\.com$
+    pattern /^(mail)\.(example)\.com$/
     tag     site.$2$1
   </rule>
   <rule>
     key     domain
-    pattern .+
+    pattern /.+/
     tag     site.unmatched
   </rule>
 </match>

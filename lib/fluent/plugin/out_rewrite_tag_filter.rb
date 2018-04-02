@@ -17,7 +17,12 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     config_param :key, :string
     desc "The regular expression"
     config_param :pattern do |value|
-      Regexp.compile(value)
+      if value.start_with?("/") && value.end_with?("/")
+        Regexp.compile(value[1..-2])
+      else
+        $log.warn("You should use \"pattern /#{value}/\" instead of \"pattern #{value}\"")
+        Regexp.compile(value)
+      end
     end
     desc "New tag"
     config_param :tag, :string
