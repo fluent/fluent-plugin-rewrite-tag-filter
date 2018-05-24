@@ -39,10 +39,6 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
         </rule>
       ]
       d = create_driver(conf)
-      assert_equal(1, $log.out.logs.size)
-      line = $log.out.logs.first
-      assert_equal("[warn]: You should use \"pattern /.+/\" instead of \"pattern .+\"",
-                   line[/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{4} (.+)/, 1])
       assert_equal(/.+/, d.instance.rules.first.pattern)
     end
   end
