@@ -18,4 +18,5 @@ Gem::Specification.new do |s|
   s.add_development_dependency "test-unit", ">= 3.1.0"
   s.add_development_dependency "rake"
   s.add_runtime_dependency "fluentd", [">= 0.14.2", "< 2"]
+  s.add_runtime_dependency "fluent-config-regexp-type"
 end

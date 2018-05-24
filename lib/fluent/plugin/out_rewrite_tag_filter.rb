@@ -1,4 +1,5 @@
 require "fluent/plugin/output"
+require "fluent/config/regexp_type"
 
 class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   Fluent::Plugin.register_output('rewrite_tag_filter', self)
@@ -16,14 +17,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     desc "The field name to which the regular expression is applied"
     config_param :key, :string
     desc "The regular expression"
-    config_param :pattern do |value|
-      if value.start_with?("/") && value.end_with?("/")
-        Regexp.compile(value[1..-2])
-      else
-        $log.warn("You should use \"pattern /#{value}/\" instead of \"pattern #{value}\"")
-        Regexp.compile(value)
-      end
-    end
+    config_param :pattern, :regexp
     desc "New tag"
     config_param :tag, :string
     desc "If true, rewrite tag when unmatch pattern"
