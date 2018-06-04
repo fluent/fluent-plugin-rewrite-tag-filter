@@ -284,5 +284,54 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       events = d.events
       assert_equal "com.example", events[0][0]
     end
+
+    sub_test_case "empty value" do
+      test "process" do
+        conf = %[
+          skip_empty_value false
+          <rule>
+            key agent
+            pattern ^$
+            tag empty.agent
+          </rule>
+          <rule>
+            key agent
+            pattern .+
+            tag unrewrite.${tag}
+          </rule>
+        ]
+        d = create_driver(conf)
+        d.run(default_tag: "input") do
+          d.feed({ "agent" => "" })
+          d.feed({ "agent" => "Googlebot" })
+        end
+        events = d.events
+        assert_equal 2, events.size
+        assert_equal "empty.agent", events[0][0]
+        assert_equal "unrewrite.input", events[1][0]
+      end
+      test "skip" do
+        conf = %[
+          <rule>
+            key agent
+            pattern ^$
+            tag empty.agent
+          </rule>
+          <rule>
+            key agent
+            pattern .+
+            tag unrewrite.${tag}
+          </rule>
+        ]
+        d = create_driver(conf)
+        d.run(default_tag: "input") do
+          d.feed({ "agent" => "" })
+          d.feed({ "agent" => "Googlebot" })
+        end
+        events = d.events
+        assert_equal 1, events.size
+        assert_equal "unrewrite.input", events[0][0]
+      end
+    end
   end
 end

@@ -12,6 +12,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   config_param :remove_tag_prefix, :string, :default => nil
   desc 'Override hostname command for placeholder.'
   config_param :hostname_command, :string, :default => 'hostname'
+  desc 'Skip empty value'
+  config_param :skip_empty_value, :bool, :default => true
 
   config_section :rule, param_name: :rules, multi: true do
     desc "The field name to which the regular expression is applied"
@@ -77,7 +79,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   def rewrite_tag(tag, record, placeholder)
     @rewriterules.each do |record_accessor, regexp, match_operator, rewritetag|
       rewritevalue = record_accessor.call(record).to_s
-      next if rewritevalue.empty? && match_operator != MATCH_OPERATOR_EXCLUDE
+      next if @skip_empty_value && rewritevalue.empty? && match_operator != MATCH_OPERATOR_EXCLUDE
       last_match = regexp_last_match(regexp, rewritevalue)
       case match_operator
       when MATCH_OPERATOR_EXCLUDE
