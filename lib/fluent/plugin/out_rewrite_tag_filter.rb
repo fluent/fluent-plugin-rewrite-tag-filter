@@ -69,7 +69,10 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     placeholder = get_placeholder(tag)
     es.each do |time, record|
       rewrited_tag = rewrite_tag(tag, record, placeholder)
-      next if rewrited_tag.nil? || tag == rewrited_tag
+      if rewrited_tag.nil? || tag == rewrited_tag
+        log.trace("rewrite_tag_filter: tag has not been rewritten", record)
+        next
+      end
       router.emit(rewrited_tag, time, record)
     end
   end

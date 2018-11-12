@@ -284,5 +284,27 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       events = d.events
       assert_equal "com.example", events[0][0]
     end
+
+    test "tag has not been rewritten and log_level trace" do
+      conf = %[
+        @log_level trace
+        <rule>
+          key $['email']['domain']
+          pattern ^(example)\.(com)$
+          tag $2.$1
+        </rule>
+      ]
+      d = create_driver(conf)
+      d.run(default_tag: "input") do
+        d.feed({ "email" => { "localpart" => "john", "domain" => "example.com" }})
+        d.feed({ "email" => { "localpart" => "doe", "domain" => "example.jp" }})
+      end
+      events = d.events
+      assert_equal(1, events.size)
+      log = d.logs.grep(/\[trace\]/).first
+      assert_equal('rewrite_tag_filter: tag has not been rewritten email={"localpart"=>"doe", "domain"=>"example.jp"}',
+                   log.slice(/\[trace\]: (.+)$/, 1))
+      assert_equal "com.example", events[0][0]
+    end
   end
 end
