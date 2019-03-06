@@ -12,6 +12,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   config_param :remove_tag_prefix, :string, :default => nil
   desc 'Override hostname command for placeholder.'
   config_param :hostname_command, :string, :default => 'hostname'
+  desc "Emit mode"
+  config_param :emit_mode, :enum, list: [:record, :stream], default: :record
 
   config_section :rule, param_name: :rules, multi: true do
     desc "The field name to which the regular expression is applied"
@@ -67,13 +69,28 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
   def process(tag, es)
     placeholder = get_placeholder(tag)
-    es.each do |time, record|
-      rewrited_tag = rewrite_tag(tag, record, placeholder)
-      if rewrited_tag.nil? || tag == rewrited_tag
-        log.trace("rewrite_tag_filter: tag has not been rewritten", record)
-        next
+    if @emit_mode == :record
+      es.each do |time, record|
+        rewrited_tag = rewrite_tag(tag, record, placeholder)
+        if rewrited_tag.nil? || tag == rewrited_tag
+          log.trace("rewrite_tag_filter: tag has not been rewritten", record)
+          next
+        end
+        router.emit(rewrited_tag, time, record)
       end
-      router.emit(rewrited_tag, time, record)
+    else
+      new_event_streams = Hash.new {|h, k| h[k] = Fluent::MultiEventStream.new }
+      es.each do |time, record|
+        rewrited_tag = rewrite_tag(tag, record, placeholder)
+        if rewrited_tag.nil? || tag == rewrited_tag
+          log.trace("rewrite_tag_filter: tag has not been rewritten", record)
+          next
+        end
+        new_event_streams[rewrited_tag].add(time, record)
+      end
+      new_event_streams.each do |rewrited_tag, new_es|
+        router.emit_stream(rewrited_tag, new_es)
+      end
     end
   end
 
