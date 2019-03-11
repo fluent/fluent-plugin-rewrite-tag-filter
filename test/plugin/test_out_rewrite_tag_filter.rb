@@ -340,9 +340,9 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
         assert_equal(events, expected_events)
       end
 
-      test "stream" do
+      test "batch" do
         conf = %[
-          emit_mode stream
+          emit_mode batch
           <rule>
             key key
             pattern /^(odd|even)$/
