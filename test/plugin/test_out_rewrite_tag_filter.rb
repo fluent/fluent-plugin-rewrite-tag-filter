@@ -321,21 +321,21 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
         mock.proxy(d.instance.router).emit(anything, anything, anything).times(6)
         mock.proxy(d.instance.router).emit_stream(anything, anything).times(0)
         d.run(default_tag: "input") do
-          d.feed([[time, { "key" => "odd", "message": "message-1" }],
-                  [time, { "key" => "even", "message": "message-2" }],
-                  [time, { "key" => "odd", "message": "message-3" }],
-                  [time, { "key" => "even", "message": "message-4" }],
-                  [time, { "key" => "odd", "message": "message-5" }],
-                  [time, { "key" => "even", "message": "message-6" }]])
+          d.feed([[time, { "key" => "odd", "message" => "message-1" }],
+                  [time, { "key" => "even", "message" => "message-2" }],
+                  [time, { "key" => "odd", "message" => "message-3" }],
+                  [time, { "key" => "even", "message" => "message-4" }],
+                  [time, { "key" => "odd", "message" => "message-5" }],
+                  [time, { "key" => "even", "message" => "message-6" }]])
         end
         events = d.events
         expected_events = [
-          ["odd", time, { "key" => "odd", "message": "message-1" }],
-          ["even", time, { "key" => "even", "message": "message-2" }],
-          ["odd", time, { "key" => "odd", "message": "message-3" }],
-          ["even", time, { "key" => "even", "message": "message-4" }],
-          ["odd", time, { "key" => "odd", "message": "message-5" }],
-          ["even", time, { "key" => "even", "message": "message-6" }],
+          ["odd", time, { "key" => "odd", "message" => "message-1" }],
+          ["even", time, { "key" => "even", "message" => "message-2" }],
+          ["odd", time, { "key" => "odd", "message" => "message-3" }],
+          ["even", time, { "key" => "even", "message" => "message-4" }],
+          ["odd", time, { "key" => "odd", "message" => "message-5" }],
+          ["even", time, { "key" => "even", "message" => "message-6" }],
         ]
         assert_equal(events, expected_events)
       end
@@ -354,21 +354,21 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
         mock.proxy(d.instance.router).emit(anything, anything, anything).times(0)
         mock.proxy(d.instance.router).emit_stream(anything, anything).times(2)
         d.run(default_tag: "input") do
-          d.feed([[time, { "key" => "odd", "message": "message-1" }],
-                  [time, { "key" => "even", "message": "message-2" }],
-                  [time, { "key" => "odd", "message": "message-3" }],
-                  [time, { "key" => "even", "message": "message-4" }],
-                  [time, { "key" => "odd", "message": "message-5" }],
-                  [time, { "key" => "even", "message": "message-6" }]])
+          d.feed([[time, { "key" => "odd", "message" => "message-1" }],
+                  [time, { "key" => "even", "message" => "message-2" }],
+                  [time, { "key" => "odd", "message" => "message-3" }],
+                  [time, { "key" => "even", "message" => "message-4" }],
+                  [time, { "key" => "odd", "message" => "message-5" }],
+                  [time, { "key" => "even", "message" => "message-6" }]])
         end
         events = d.events
         expected_records = [
-          ["odd", time, { "key" => "odd", "message": "message-1" }],
-          ["odd", time, { "key" => "odd", "message": "message-3" }],
-          ["odd", time, { "key" => "odd", "message": "message-5" }],
-          ["even", time, { "key" => "even", "message": "message-2" }],
-          ["even", time, { "key" => "even", "message": "message-4" }],
-          ["even", time, { "key" => "even", "message": "message-6" }],
+          ["odd", time, { "key" => "odd", "message" => "message-1" }],
+          ["odd", time, { "key" => "odd", "message" => "message-3" }],
+          ["odd", time, { "key" => "odd", "message" => "message-5" }],
+          ["even", time, { "key" => "even", "message" => "message-2" }],
+          ["even", time, { "key" => "even", "message" => "message-4" }],
+          ["even", time, { "key" => "even", "message" => "message-6" }],
         ]
         assert_equal(events, expected_records)
       end
