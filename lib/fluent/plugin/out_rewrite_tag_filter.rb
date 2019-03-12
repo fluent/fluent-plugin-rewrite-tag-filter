@@ -61,6 +61,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     unless @remove_tag_prefix.nil?
       @remove_tag_prefix = /^#{Regexp.escape(@remove_tag_prefix)}\.?/
     end
+
+    @batch_mode = @emit_mode == :batch
   end
 
   def multi_workers_ready?
@@ -69,16 +71,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
   def process(tag, es)
     placeholder = get_placeholder(tag)
-    if @emit_mode == :record
-      es.each do |time, record|
-        rewrited_tag = rewrite_tag(tag, record, placeholder)
-        if rewrited_tag.nil? || tag == rewrited_tag
-          log.trace("rewrite_tag_filter: tag has not been rewritten", record)
-          next
-        end
-        router.emit(rewrited_tag, time, record)
-      end
-    else
+    if @batch_mode
       new_event_streams = Hash.new {|h, k| h[k] = Fluent::MultiEventStream.new }
       es.each do |time, record|
         rewrited_tag = rewrite_tag(tag, record, placeholder)
@@ -90,6 +83,15 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       end
       new_event_streams.each do |rewrited_tag, new_es|
         router.emit_stream(rewrited_tag, new_es)
+      end
+    else
+      es.each do |time, record|
+        rewrited_tag = rewrite_tag(tag, record, placeholder)
+        if rewrited_tag.nil? || tag == rewrited_tag
+          log.trace("rewrite_tag_filter: tag has not been rewritten", record)
+          next
+        end
+        router.emit(rewrited_tag, time, record)
       end
     end
   end
