@@ -12,6 +12,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   config_param :remove_tag_prefix, :string, :default => nil
   desc 'Override hostname command for placeholder.'
   config_param :hostname_command, :string, :default => 'hostname'
+  desc "The emit mode. If `batch`, this plugin will emit events per rewritten tag."
+  config_param :emit_mode, :enum, list: [:record, :batch], default: :batch
 
   config_section :rule, param_name: :rules, multi: true do
     desc "The field name to which the regular expression is applied"
@@ -59,6 +61,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     unless @remove_tag_prefix.nil?
       @remove_tag_prefix = /^#{Regexp.escape(@remove_tag_prefix)}\.?/
     end
+
+    @batch_mode = @emit_mode == :batch
   end
 
   def multi_workers_ready?
@@ -67,13 +71,28 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
   def process(tag, es)
     placeholder = get_placeholder(tag)
-    es.each do |time, record|
-      rewrited_tag = rewrite_tag(tag, record, placeholder)
-      if rewrited_tag.nil? || tag == rewrited_tag
-        log.trace("rewrite_tag_filter: tag has not been rewritten", record)
-        next
+    if @batch_mode
+      new_event_streams = Hash.new {|h, k| h[k] = Fluent::MultiEventStream.new }
+      es.each do |time, record|
+        rewrited_tag = rewrite_tag(tag, record, placeholder)
+        if rewrited_tag.nil? || tag == rewrited_tag
+          log.trace("rewrite_tag_filter: tag has not been rewritten", record)
+          next
+        end
+        new_event_streams[rewrited_tag].add(time, record)
       end
-      router.emit(rewrited_tag, time, record)
+      new_event_streams.each do |rewrited_tag, new_es|
+        router.emit_stream(rewrited_tag, new_es)
+      end
+    else
+      es.each do |time, record|
+        rewrited_tag = rewrite_tag(tag, record, placeholder)
+        if rewrited_tag.nil? || tag == rewrited_tag
+          log.trace("rewrite_tag_filter: tag has not been rewritten", record)
+          next
+        end
+        router.emit(rewrited_tag, time, record)
+      end
     end
   end
 
