@@ -42,8 +42,8 @@ For more details, see [Plugin Management](https://docs.fluentd.org/v0.14/article
 * **remove_tag_prefix** (string) (optional): Remove tag prefix for tag placeholder. (see the section of "Tag placeholder")
 * **hostname_command** (string) (optional): Override hostname command for placeholder. (see the section of "Tag placeholder")
   * Default value: `hostname`
-* **emit_mode** (enum) (required): Specify emit_mode to `record` or `batch`. `record` will emit events per record. `batch` will emit events per rewritten tag, and decrease IO.
-  * Default value: `record`
+* **emit_mode** (enum) (required): Specify emit_mode to `batch` or `record`. `batch` will emit events per rewritten tag, and decrease IO. `record` will emit events per record.
+  * Default value: `batch`
 
 ### \<rule\> section (optional) (multiple)
 

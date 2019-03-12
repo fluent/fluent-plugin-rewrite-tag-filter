@@ -310,6 +310,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     sub_test_case "emit_mode" do
       test "record" do
         conf = %[
+          emit_mode record
           <rule>
             key key
             pattern /^(odd|even)$/

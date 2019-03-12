@@ -13,7 +13,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   desc 'Override hostname command for placeholder.'
   config_param :hostname_command, :string, :default => 'hostname'
   desc "The emit mode. If `batch`, this plugin will emit events per rewritten tag."
-  config_param :emit_mode, :enum, list: [:record, :batch], default: :record
+  config_param :emit_mode, :enum, list: [:record, :batch], default: :batch
 
   config_section :rule, param_name: :rules, multi: true do
     desc "The field name to which the regular expression is applied"
