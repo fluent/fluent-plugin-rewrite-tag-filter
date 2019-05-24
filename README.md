@@ -31,7 +31,7 @@ $ sudo td-agent-gem install fluent-plugin-rewrite-tag-filter -v 1.6.0
 $ sudo td-agent-gem install fluent-plugin-rewrite-tag-filter
 ```
 
-For more details, see [Plugin Management](https://docs.fluentd.org/v0.14/articles/plugin-management)
+For more details, see [Plugin Management](https://docs.fluentd.org/deployment/plugin-management)
 
 ## Configuration
 
