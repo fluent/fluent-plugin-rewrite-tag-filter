@@ -59,7 +59,11 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     end
 
     unless @remove_tag_prefix.nil?
-      @remove_tag_prefix = /^#{Regexp.escape(@remove_tag_prefix)}\.?/
+      if @remove_tag_prefix.start_with?("/") and @remove_tag_prefix.end_with?("/")
+        @remove_tag_prefix = Regexp::new('^' + @remove_tag_prefix[1..-2] + '\.?')
+      else
+        @remove_tag_prefix = /^#{Regexp.escape(@remove_tag_prefix)}\.?/
+      end
     end
 
     @batch_mode = @emit_mode == :batch

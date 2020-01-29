@@ -127,6 +127,74 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal 'access', events[0][0] # tag
     end
 
+    test "remove_tag_prefix regexp format" do
+      config = %[
+        remove_tag_prefix /^input\.(apache|nginx)/
+        <rule>
+          key domain
+          pattern ^www\.google\.com$
+          tag rewritten.${tag}
+        </rule>
+      ]
+      d = create_driver(config)
+      d.run do
+        d.feed(
+            'input.apache.access',  # event tag
+            1500000000,             # random timestamp
+            {'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000}
+        )
+        d.feed(
+            'input.nginx.access',
+            1500000000,
+            {'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000}
+        )
+        d.feed(
+            'input.tomcat.access',
+            1500000000,
+            {'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000}
+        )
+      end
+      events = d.events
+      assert_equal 3, events.length
+      assert_equal 'rewritten.access', events[0][0] # tag
+      assert_equal 'rewritten.access', events[1][0] # tag
+      assert_equal 'rewritten.input.tomcat.access', events[2][0] # tag
+    end
+
+    test "remove_tag_prefix regexp format with dot" do
+      config = %[
+        remove_tag_prefix /^input\.(apache|nginx)\./
+        <rule>
+          key domain
+          pattern ^www\.google\.com$
+          tag rewritten.${tag}
+        </rule>
+      ]
+      d = create_driver(config)
+      d.run do
+        d.feed(
+            'input.apache.access',  # event tag
+            1500000000,             # random timestamp
+            {'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000}
+        )
+        d.feed(
+            'input.nginx.access',
+            1500000000,
+            {'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000}
+        )
+        d.feed(
+            'input.tomcat.access',
+            1500000000,
+            {'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000}
+        )
+      end
+      events = d.events
+      assert_equal 3, events.length
+      assert_equal 'rewritten.access', events[0][0] # tag
+      assert_equal 'rewritten.access', events[1][0] # tag
+      assert_equal 'rewritten.input.tomcat.access', events[2][0] # tag
+    end
+
     test "short hostname" do
       config = %[
         remove_tag_prefix input
