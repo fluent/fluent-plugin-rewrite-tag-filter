@@ -214,7 +214,7 @@ For example with `td.apache.access` tag, it will get `td` by `${tag_parts[0]}` a
 
 **Note** Currently, range expression ```${tag_parts[0..2]}``` is not supported.
 
-#### Placeholder Option
+#### Placeholder Options
 
 * `remove_tag_prefix`  
 
@@ -254,6 +254,17 @@ It's a sample to rewrite a tag with placeholder.
     key     domain
     pattern ^(mail)\.(example)\.com$
     tag     rewritten.${tag}.$2$1
+  </rule>
+</match>
+
+# It will get "http.access.log"
+<match input.{apache,nginx}.access.log>
+  @type rewrite_tag_filter
+  remove_tag_regexp /^input\.(apache|nginx)\./
+  <rule>
+    key     domain
+    pattern ^.+$
+    tag     http.${tag}
   </rule>
 </match>
 
