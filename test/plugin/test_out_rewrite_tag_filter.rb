@@ -41,6 +41,21 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       d = create_driver(conf)
       assert_equal(/.+/, d.instance.rules.first.pattern)
     end
+
+    test "remove_tag_prefix and remove_tag_regexp are exclusive" do
+      conf = %[
+        remove_tag_prefix prefix
+        remove_tag_regexp /^prefix\./
+        <rule>
+          key message
+          pattern .+
+          tag ${tag}
+        </rule>
+      ]
+      assert_raise(Fluent::ConfigError) do
+        create_driver(conf)
+      end
+    end
   end
 
   sub_test_case "section style" do
@@ -125,6 +140,30 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       events = d.events
       assert_equal 1, events.length
       assert_equal 'access', events[0][0] # tag
+    end
+
+    sub_test_case "remove_tag_regexp" do
+      test "plain" do
+        config = %[
+          remove_tag_regexp /^input\.(apache|nginx)\./
+          <rule>
+            key domain
+            pattern ^www\.google\.com$
+            tag rewritten.${tag}
+          </rule>
+        ]
+        d = create_driver(config)
+        d.run do
+          d.feed('input.apache.access', event_time, {'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
+          d.feed('input.nginx.access', event_time, {'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
+          d.feed('input.tomcat.access', event_time, {'domain' => 'www.google.com', 'path' => '/foo/bar?key=value', 'agent' => 'Googlebot', 'response_time' => 1000000})
+        end
+        events = d.events
+        assert_equal 3, events.length
+        assert_equal 'rewritten.access', events[0][0]
+        assert_equal 'rewritten.access', events[1][0]
+        assert_equal 'rewritten.input.tomcat.access', events[2][0]
+      end
     end
 
     test "short hostname" do

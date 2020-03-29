@@ -220,6 +220,10 @@ For example with `td.apache.access` tag, it will get `td` by `${tag_parts[0]}` a
 
 This option adds removing tag prefix for `${tag}` or `__TAG__` in placeholder.
 
+* `remove_tag_regexp`  
+
+This option adds removing tag regexp for `${tag}` or `__TAG__` in placeholder.
+
 * `hostname_command` 
 
 By default, execute command as `hostname` to get full hostname.  
@@ -235,6 +239,17 @@ It's a sample to rewrite a tag with placeholder.
 <match apache.access>
   @type rewrite_tag_filter
   remove_tag_prefix apache
+  <rule>
+    key     domain
+    pattern ^(mail)\.(example)\.com$
+    tag     rewrited.${tag}.$2$1
+  </rule>
+</match>
+
+# It will get "rewrited.access.ExampleMail"
+<match apache.access>
+  @type rewrite_tag_filter
+  remove_tag_prefix /^apache\./
   <rule>
     key     domain
     pattern ^(mail)\.(example)\.com$
