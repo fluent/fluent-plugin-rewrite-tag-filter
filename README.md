@@ -249,7 +249,7 @@ It's a sample to rewrite a tag with placeholder.
 # It will get "rewritten.access.ExampleMail"
 <match apache.access>
   @type rewrite_tag_filter
-  remove_tag_prefix /^apache\./
+  remove_tag_regexp /^apache\./
   <rule>
     key     domain
     pattern ^(mail)\.(example)\.com$
