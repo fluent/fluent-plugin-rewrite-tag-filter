@@ -3,7 +3,7 @@
 ## Overview
 
 Rewrite Tag Filter for [Fluentd](http://fluentd.org). It is designed to rewrite tags like mod_rewrite.  
-Re-emit the record with rewrited tag when a value matches/unmatches with a regular expression.  
+Re-emit the record with rewritten tag when a value matches/unmatches with a regular expression.  
 Also you can change a tag from Apache log by domain, status code (ex. 500 error),  
 user-agent, request-uri, regex-backreference and so on with regular expression.
 
@@ -200,7 +200,7 @@ When original tag is `kubernetes.var.log`, this will be converted to `default.ku
 
 ### Tag placeholder
 
-It is supported these placeholder for new_tag (rewrited tag).
+It is supported these placeholder for new_tag (rewritten tag).
 
 - `${tag}`
 - `__TAG__`
@@ -214,11 +214,15 @@ For example with `td.apache.access` tag, it will get `td` by `${tag_parts[0]}` a
 
 **Note** Currently, range expression ```${tag_parts[0..2]}``` is not supported.
 
-#### Placeholder Option
+#### Placeholder Options
 
 * `remove_tag_prefix`  
 
 This option adds removing tag prefix for `${tag}` or `__TAG__` in placeholder.
+
+* `remove_tag_regexp`  
+
+This option adds removing tag regexp for `${tag}` or `__TAG__` in placeholder.
 
 * `hostname_command` 
 
@@ -231,45 +235,67 @@ It comes short hostname with `hostname_command hostname -s` configuration specif
 It's a sample to rewrite a tag with placeholder.
 
 ```
-# It will get "rewrited.access.ExampleMail"
+# It will get "rewritten.access.ExampleMail"
 <match apache.access>
   @type rewrite_tag_filter
   remove_tag_prefix apache
   <rule>
     key     domain
     pattern ^(mail)\.(example)\.com$
-    tag     rewrited.${tag}.$2$1
+    tag     rewritten.${tag}.$2$1
   </rule>
 </match>
 
-# It will get "rewrited.ExampleMail.app30-124.foo.com" when hostname is "app30-124.foo.com"
+# It will get "rewritten.access.ExampleMail"
+<match apache.access>
+  @type rewrite_tag_filter
+  remove_tag_regexp /^apache\./
+  <rule>
+    key     domain
+    pattern ^(mail)\.(example)\.com$
+    tag     rewritten.${tag}.$2$1
+  </rule>
+</match>
+
+# It will get "http.access.log"
+<match input.{apache,nginx}.access.log>
+  @type rewrite_tag_filter
+  remove_tag_regexp /^input\.(apache|nginx)\./
+  <rule>
+    key     domain
+    pattern ^.+$
+    tag     http.${tag}
+  </rule>
+</match>
+
+# It will get "rewritten.ExampleMail.app30-124.foo.com" when hostname is "app30-124.foo.com"
 <match apache.access>
   @type rewrite_tag_filter
   <rule>
     key     domain
     pattern ^(mail)\.(example)\.com$
-    tag     rewrited.$2$1.${hostname}
+    tag     rewritten.$2$1.${hostname}
   </rule>
 </match>
 
-# It will get "rewrited.ExampleMail.app30-124" when hostname is "app30-124.foo.com"
+# It will get "rewritten.ExampleMail.app30-124" when hostname is "app30-124.foo.com"
 <match apache.access>
   @type rewrite_tag_filter
   hostname_command hostname -s
   <rule>
     key     domain
     pattern ^(mail)\.(example)\.com$
-    tag     rewrited.$2$1.${hostname}
+    tag     rewritten.$2$1.${hostname}
   </rule>
 </match>
 
-# It will get "rewrited.game.pool"
+# It will get "rewritten.game.pool"
 <match app.game.pool.activity>
   @type rewrite_tag_filter
   <rule>
     key     domain
     pattern ^.+$
-    tag     rewrited.${tag_parts[1]}.${tag_parts[2]}
+    tag     rewritten.${tag_parts[1]}.${tag_parts[2]}
   </rule>
 </match>
 ```

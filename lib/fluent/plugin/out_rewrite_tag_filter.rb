@@ -10,6 +10,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   config_param :capitalize_regex_backreference, :bool, :default => false
   desc 'Remove tag prefix for tag placeholder.'
   config_param :remove_tag_prefix, :string, :default => nil
+  desc "Remove tag regexp for tag placeholder."
+  config_param :remove_tag_regexp, :regexp, default: nil
   desc 'Override hostname command for placeholder.'
   config_param :hostname_command, :string, :default => 'hostname'
   desc "The emit mode. If `batch`, this plugin will emit events per rewritten tag."
@@ -58,8 +60,12 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       raise Fluent::ConfigError, "duplicated rewriterules found #{@rewriterules.inspect}"
     end
 
+    if @remove_tag_prefix && @remove_tag_regexp
+      raise Fluent::ConfigError, "remove_tag_prefix and remove_tag_regexp are exclusive"
+    end
+
     unless @remove_tag_prefix.nil?
-      @remove_tag_prefix = /^#{Regexp.escape(@remove_tag_prefix)}\.?/
+      @remove_tag_regexp = /^#{Regexp.escape(@remove_tag_prefix)}\.?/
     end
 
     @batch_mode = @emit_mode == :batch
@@ -135,7 +141,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   end
 
   def get_placeholder(tag)
-    tag = tag.sub(@remove_tag_prefix, '') if @remove_tag_prefix
+    tag = tag.sub(@remove_tag_regexp, '') if @remove_tag_regexp
 
     result = {
       '__HOSTNAME__' => @hostname,
