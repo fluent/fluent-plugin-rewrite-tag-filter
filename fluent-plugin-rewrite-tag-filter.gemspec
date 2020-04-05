@@ -1,9 +1,8 @@
-# -*- encoding: utf-8 -*-
 $:.push File.expand_path("../lib", __FILE__)
 
 Gem::Specification.new do |s|
   s.name        = "fluent-plugin-rewrite-tag-filter"
-  s.version     = "2.2.0"
+  s.version     = "2.3.0"
   s.license     = "Apache-2.0"
   s.authors     = ["Kentaro Yoshida"]
   s.email       = ["y.ken.studio@gmail.com"]
