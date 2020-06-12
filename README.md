@@ -301,6 +301,35 @@ It's a sample to rewrite a tag with placeholder.
 </match>
 ```
 
+### Altering Labels
+
+In addition to changing tags, you can also change event's route by setting
+ the label for the re-emitted event.
+
+For example, given this configuration:
+
+```
+<match apache.access>
+  @type rewrite_tag_filter
+  <rule>
+    key     domain
+    pattern ^www\.example\.com$
+    tag     web.${tag}
+  </rule>
+  <rule>
+    key     domain
+    pattern ^(.*)\.example\.com$
+    tag     other.$1
+    label   other
+  </rule>
+</match>
+```
+
+message: `{"domain": "www.example.com"}` will get its tag changed to 
+`web.apache.access`, while message 
+`{"domain": "api.example.com"}` will get its tag changed to `other.api` and
+ be sent to label `other`
+
 ## Example
 
 - Example1: how to analyze response_time, response_code and user_agent for each virtual domain websites.  
