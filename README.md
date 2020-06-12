@@ -52,6 +52,7 @@ For more details, see [Plugin Management](https://docs.fluentd.org/deployment/pl
   `/regexp/` is preferred because `/regexp/` style can support character classes such as `/[a-z]/`.
   The pattern without slashes will cause errors if you use patterns start with character classes.
 * **tag** (string) (required): New tag
+* **label** (string) (optional): New label. If specified, label can be changed per-rule.
 * **invert** (bool) (optional): If true, rewrite tag when unmatch pattern
   * Default value: `false`
 
