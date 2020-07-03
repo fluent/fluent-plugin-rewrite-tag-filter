@@ -79,10 +79,10 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
   def get_router(tgt_label)
     label_router = if tgt_label.nil? || tgt_label.empty?
-            router
-        else
-            event_emitter_router(tgt_label)
-        end
+        router
+    else
+        event_emitter_router(tgt_label)
+    end
     #log.trace "Got router for #{tgt_label}: #{!label_router.nil?}"
     return label_router
   end
