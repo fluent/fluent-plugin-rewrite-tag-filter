@@ -52,6 +52,7 @@ For more details, see [Plugin Management](https://docs.fluentd.org/deployment/pl
   `/regexp/` is preferred because `/regexp/` style can support character classes such as `/[a-z]/`.
   The pattern without slashes will cause errors if you use patterns start with character classes.
 * **tag** (string) (required): New tag
+* **label** (string) (optional): New label. If specified, label can be changed per-rule.
 * **invert** (bool) (optional): If true, rewrite tag when unmatch pattern
   * Default value: `false`
 
@@ -299,6 +300,35 @@ It's a sample to rewrite a tag with placeholder.
   </rule>
 </match>
 ```
+
+### Altering Labels
+
+In addition to changing tags, you can also change event's route by setting
+ the label for the re-emitted event.
+
+For example, given this configuration:
+
+```
+<match apache.access>
+  @type rewrite_tag_filter
+  <rule>
+    key     domain
+    pattern ^www\.example\.com$
+    tag     web.${tag}
+  </rule>
+  <rule>
+    key     domain
+    pattern ^(.*)\.example\.com$
+    tag     other.$1
+    label   other
+  </rule>
+</match>
+```
+
+message: `{"domain": "www.example.com"}` will get its tag changed to 
+`web.apache.access`, while message 
+`{"domain": "api.example.com"}` will get its tag changed to `other.api` and
+ be sent to label `other`
 
 ## Example
 

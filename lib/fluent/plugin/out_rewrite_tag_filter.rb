@@ -24,6 +24,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     config_param :pattern, :regexp
     desc "New tag"
     config_param :tag, :string
+    desc "New label. If specified, label can be changed per-rule."
+    config_param :label, :string, default: nil
     desc "If true, rewrite tag when unmatch pattern"
     config_param :invert, :bool, default: false
   end
@@ -43,7 +45,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       end
 
       invert = rule.invert ? MATCH_OPERATOR_EXCLUDE : ""
-      @rewriterules.push([record_accessor_create(rule.key), rule.pattern, invert, rule.tag])
+      @rewriterules.push([record_accessor_create(rule.key), rule.pattern, invert, rule.tag, rule.label])
       rewriterule_names.push(rule.key + invert + rule.pattern.to_s)
       log.info "adding rewrite_tag_filter rule: #{rule.key} #{@rewriterules.last}"
     end
@@ -75,35 +77,45 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     true
   end
 
+  def get_router(tgt_label)
+    label_router = if tgt_label.nil? || tgt_label.empty?
+        router
+    else
+        event_emitter_router(tgt_label)
+    end
+    #log.trace "Got router for #{tgt_label}: #{!label_router.nil?}"
+    return label_router
+  end
+
   def process(tag, es)
     placeholder = get_placeholder(tag)
-    if @batch_mode
-      new_event_streams = Hash.new {|h, k| h[k] = Fluent::MultiEventStream.new }
-      es.each do |time, record|
-        rewrited_tag = rewrite_tag(tag, record, placeholder)
-        if rewrited_tag.nil? || tag == rewrited_tag
-          log.trace("rewrite_tag_filter: tag has not been rewritten", record)
-          next
-        end
-        new_event_streams[rewrited_tag].add(time, record)
+    new_event_streams =  Hash.new {|hh, kk| hh[kk] = Hash.new {|h, k| h[k] = Fluent::MultiEventStream.new }}if @batch_mode
+
+    es.each do |time, record|
+      rewrited_tag, rewrited_label  = rewrite_tag(tag, record, placeholder)
+      if (rewrited_tag.nil? || tag == rewrited_tag) && rewrited_label.nil?
+        log.trace("rewrite_tag_filter: tag has not been rewritten", record)
+        next
       end
-      new_event_streams.each do |rewrited_tag, new_es|
-        router.emit_stream(rewrited_tag, new_es)
+      rewrited_tag = tag if rewrited_tag.nil?
+      if new_event_streams.nil?
+        get_router(rewrited_label).emit(rewrited_tag, time, record)
+      else
+        new_event_streams[rewrited_label][rewrited_tag].add(time, record)
       end
-    else
-      es.each do |time, record|
-        rewrited_tag = rewrite_tag(tag, record, placeholder)
-        if rewrited_tag.nil? || tag == rewrited_tag
-          log.trace("rewrite_tag_filter: tag has not been rewritten", record)
-          next
+    end
+    if !new_event_streams.nil?
+      new_event_streams.each do |rewrited_label, label_event_streams |
+        labeled_router = get_router(rewrited_label)
+        label_event_streams.each do |rewrited_tag, new_es|
+            labeled_router.emit_stream(rewrited_tag, new_es)
         end
-        router.emit(rewrited_tag, time, record)
       end
     end
   end
 
   def rewrite_tag(tag, record, placeholder)
-    @rewriterules.each do |record_accessor, regexp, match_operator, rewritetag|
+    @rewriterules.each do |record_accessor, regexp, match_operator, rewritetag, rewritelabel|
       rewritevalue = record_accessor.call(record).to_s
       next if rewritevalue.empty? && match_operator != MATCH_OPERATOR_EXCLUDE
       last_match = regexp_last_match(regexp, rewritevalue)
@@ -119,9 +131,9 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
         log.warn "rewrite_tag_filter: unknown placeholder found. :placeholder=>#{$1} :tag=>#{tag} :rewritetag=>#{rewritetag}" unless placeholder.include?($1)
         placeholder[$1]
       end
-      return rewritetag
+      return rewritetag, rewritelabel
     end
-    return nil
+    return nil, nil
   end
 
   def regexp_last_match(regexp, rewritevalue)
