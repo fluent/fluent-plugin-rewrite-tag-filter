@@ -371,7 +371,7 @@ http://y-ken.hatenablog.com/entry/fluent-plugin-rewrite-tag-filter-v1.3.1
 http://chopl.in/blog/2013/06/07/postgresql_csv_log_with_fluentd.html
 
 - S3とFluentdを用いた効率的なログ管理 | SmartNews開発者ブログ<br>
-http://developer.smartnews.be/blog/2013/09/02/an-effective-log-management-technique-which-uses-fluentd-and-s3/
+https://developer.smartnews.com/blog/2013/09/02/an-effective-log-management-technique-which-uses-fluentd-and-s3/
 
 - fluentd(td-agent) の導入 : Raccoon Tech Blog [株式会社ラクーン 技術戦略部ブログ]<br>
 http://techblog.raccoon.ne.jp/archives/35031163.html
