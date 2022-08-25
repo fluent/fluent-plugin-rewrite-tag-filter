@@ -55,6 +55,9 @@ For more details, see [Plugin Management](https://docs.fluentd.org/deployment/pl
 * **label** (string) (optional): New label. If specified, label can be changed per-rule.
 * **invert** (bool) (optional): If true, rewrite tag when unmatch pattern
   * Default value: `false`
+* **default** (bool) (optional): If true, match all events.
+  Cannot be used with `key`, `pattern`, or `invert`.
+  * Default value: `false`
 
 ### Usage
 
@@ -387,4 +390,3 @@ Pull requests are very welcome!!
 
 Copyright :  Copyright (c) 2012- Kentaro Yoshida (@yoshi_ken)  
 License   :  Apache License, Version 2.0
-
