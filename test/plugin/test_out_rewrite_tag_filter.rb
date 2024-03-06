@@ -417,6 +417,32 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal(events, expected_events)
     end
 
+    test "default rule" do
+      config = %[
+        <rule>
+          key domain
+          pattern ^www\..+$
+          tag not_start_with_www
+          invert true
+        </rule>
+        <rule>
+          default true
+          tag start_with_www
+        </rule>
+      ]
+      d = create_driver(config)
+      d.run(default_tag: "input.access") do
+        d.feed({'domain' => 'www.google.com'})
+        d.feed({'path' => '/'})
+        d.feed({'domain' => 'maps.google.com'})
+      end
+      events = d.events
+      assert_equal 3, events.length
+      assert_equal 'start_with_www', events[0][0] # tag
+      assert_equal 'not_start_with_www', events[1][0] # tag
+      assert_equal 'not_start_with_www', events[2][0] # tag
+    end
+
     sub_test_case "emit_mode" do
       test "record" do
         conf = %[
