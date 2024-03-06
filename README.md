@@ -109,6 +109,7 @@ It's a sample to exclude some static file log before split tag by domain.
     pattern /^(mail)\.(example)\.com$/
     tag     site.$2$1
   </rule>
+  # Note: Specify catch-all rule in the last block not to lost unmatched records
   <rule>
     key     domain
     pattern /.+/
