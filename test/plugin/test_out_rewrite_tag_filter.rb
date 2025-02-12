@@ -341,7 +341,8 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       events = d.events
       assert_equal(1, events.size)
       log = d.logs.grep(/\[trace\]/).first
-      assert_equal('rewrite_tag_filter: tag has not been rewritten email={"localpart"=>"doe", "domain"=>"example.jp"}',
+      email = {"localpart" => "doe", "domain" => "example.jp"}
+      assert_equal("rewrite_tag_filter: tag has not been rewritten email=#{email}",
                    log.slice(/\[trace\]: (.+)$/, 1))
       assert_equal "com.example", events[0][0]
     end
