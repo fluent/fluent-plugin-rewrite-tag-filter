@@ -112,7 +112,7 @@ It's a sample to exclude some static file log before split tag by domain.
   # Note: Specify catch-all rule in the last block not to lost unmatched records
   <rule>
     key     domain
-    pattern /.+/
+    pattern /.*/
     tag     site.unmatched
   </rule>
 </match>
@@ -157,7 +157,7 @@ $ tailf /var/log/td-agent/td-agent.log
 2012-09-16 18:10:51 +0900: adding rewrite_tag_filter rule: [2, "domain", /^maps\.example\.com$/, "site.ExampleMaps"]
 2012-09-16 18:10:51 +0900: adding rewrite_tag_filter rule: [3, "domain", /^news\.example\.com$/, "site.ExampleNews"]
 2012-09-16 18:10:51 +0900: adding rewrite_tag_filter rule: [4, "domain", /^(mail)\.(example)\.com$/, "site.$2$1"]
-2012-09-16 18:10:51 +0900: adding rewrite_tag_filter rule: [5, "domain", /.+/, "site.unmatched"]
+2012-09-16 18:10:51 +0900: adding rewrite_tag_filter rule: [5, "domain", /.*/, "site.unmatched"]
 ```
 
 ### Nested attributes
