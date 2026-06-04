@@ -1,4 +1,8 @@
-# fluent-plugin-rewrite-tag-filter [![Build Status](https://travis-ci.org/fluent/fluent-plugin-rewrite-tag-filter.png?branch=master)](https://travis-ci.org/fluent/fluent-plugin-rewrite-tag-filter)
+# fluent-plugin-rewrite-tag-filter
+
+[![Testing on macOS](https://github.com/fluent/fluent-plugin-rewrite-tag-filter/actions/workflows/macos.yml/badge.svg)](https://github.com/fluent/fluent-plugin-rewrite-tag-filter/actions/workflows/macos.yml)
+[![Testing on Ubuntu](https://github.com/fluent/fluent-plugin-rewrite-tag-filter/actions/workflows/linux.yml/badge.svg)](https://github.com/fluent/fluent-plugin-rewrite-tag-filter/actions/workflows/linux.yml)
+[![Testing on Windows](https://github.com/fluent/fluent-plugin-rewrite-tag-filter/actions/workflows/windows.yml/badge.svg)](https://github.com/fluent/fluent-plugin-rewrite-tag-filter/actions/workflows/windows.yml)
 
 ## Overview
 
