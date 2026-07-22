@@ -185,7 +185,7 @@ To catch every record regardless of whether the field exists, use an inverted ru
 
 Note that this also means an inverted rule behaves differently from what you might expect for a missing field in general. For example, `pattern /^200$/` with `invert true` fires for a record that has no `status` field at all, because an empty string does not match that pattern.
 
-If you want to keep unmatched records instead of discarding them, note that re-emitting them with the same tag is not possible. This is an output plugin, so the surrounding `<match>` has already routed the event here, and emitting it again with the same tag would make the same `<match>` catch it again forever. The plugin therefore skips an event whose tag is unchanged unless a `label` is given. To keep unmatched records, either rewrite them to a tag that the same `<match>` does not cover, or keep the tag and set `label` on the catch-all rule so that they are routed to another label:
+If you want to keep unmatched records instead of discarding them, note that re-emitting them with the same tag into the same route is not possible. This is an output plugin, so the surrounding `<match>` has already routed the event here, and emitting it again with the same tag would make the same `<match>` catch it again forever. The plugin therefore skips an event whose tag is unchanged unless a `label` is given. To keep unmatched records, either rewrite them to a tag that the same `<match>` does not cover, or keep the tag and set `label` on the catch-all rule so that they are routed to another label:
 
 ```
 <rule>
