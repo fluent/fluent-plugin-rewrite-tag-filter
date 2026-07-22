@@ -113,7 +113,9 @@ It's a sample to exclude some static file log before split tag by domain.
     pattern /^(mail)\.(example)\.com$/
     tag     site.$2$1
   </rule>
-  # Note: Specify catch-all rule in the last block not to lost unmatched records
+  # Note: Specify catch-all rule in the last block not to lose unmatched records.
+  # This rule only covers records that actually have a non-empty "domain" field.
+  # See "Handling records that do not have the key" below for a rule that covers every record.
   <rule>
     key     domain
     pattern /.+/
@@ -163,6 +165,41 @@ $ tailf /var/log/td-agent/td-agent.log
 2012-09-16 18:10:51 +0900: adding rewrite_tag_filter rule: [4, "domain", /^(mail)\.(example)\.com$/, "site.$2$1"]
 2012-09-16 18:10:51 +0900: adding rewrite_tag_filter rule: [5, "domain", /.+/, "site.unmatched"]
 ```
+
+### Handling records that do not have the key
+
+Each rule is evaluated against `record[key]`, and a record that matches none of the rules is not re-emitted, so it is silently dropped. A missing field is read as an empty string, and a normal rule (`invert false`) is skipped before its pattern is evaluated when the value is empty. Because of this, neither `pattern /.+/` nor `pattern /.*/` fires for a record that lacks the field, and a plain catch-all rule only covers records where the field exists and is not empty.
+
+To catch every record regardless of whether the field exists, use an inverted rule whose pattern can never match anything, and place it as the last rule:
+
+```
+<rule>
+  key     domain
+  pattern /(?!)/
+  invert  true
+  tag     site.unmatched
+</rule>
+```
+
+`(?!)` is an empty negative lookahead, so it never matches any input, and combined with `invert true` the rule always fires whether the field holds a value, is empty, or is absent from the record.
+
+Note that this also means an inverted rule behaves differently from what you might expect for a missing field in general. For example, `pattern /^200$/` with `invert true` fires for a record that has no `status` field at all, because an empty string does not match that pattern.
+
+If you want to keep unmatched records instead of discarding them, note that re-emitting them with the same tag into the same route is not possible. This is an output plugin, so the surrounding `<match>` has already routed the event here, and emitting it again with the same tag would make the same `<match>` catch it again forever. The plugin therefore skips an event whose tag is unchanged unless a `label` is given. To keep unmatched records, either rewrite them to a tag that the same `<match>` does not cover, or keep the tag and set `label` on the catch-all rule so that they are routed to another label:
+
+```
+<rule>
+  key     domain
+  pattern /(?!)/
+  invert  true
+  tag     ${tag}
+  label   @UNMATCHED
+</rule>
+```
+
+The `<label @UNMATCHED>` section must consume these records (for example, write them out). If it re-emits them with the tag unchanged and routes them back to `@UNMATCHED`, they loop for the same reason.
+
+Alternatively, put `record_modifier` or `record_transformer` in front of this plugin so that the field always exists with a default value.
 
 ### Nested attributes
 
