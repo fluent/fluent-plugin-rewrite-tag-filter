@@ -197,6 +197,8 @@ If you want to keep unmatched records instead of discarding them, note that re-e
 </rule>
 ```
 
+The `<label @UNMATCHED>` section must consume these records (for example, write them out). If it re-emits them with the tag unchanged and routes them back to `@UNMATCHED`, they loop for the same reason.
+
 Alternatively, put `record_modifier` or `record_transformer` in front of this plugin so that the field always exists with a default value.
 
 ### Nested attributes
