@@ -19,15 +19,17 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
   config_section :rule, param_name: :rules, multi: true do
     desc "The field name to which the regular expression is applied"
-    config_param :key, :string
+    config_param :key, :string, default: nil
     desc "The regular expression"
-    config_param :pattern, :regexp
+    config_param :pattern, :regexp, default: nil
     desc "New tag"
     config_param :tag, :string
     desc "New label. If specified, label can be changed per-rule."
     config_param :label, :string, default: nil
     desc "If true, rewrite tag when unmatch pattern"
     config_param :invert, :bool, default: false
+    desc "If true, match all events"
+    config_param :default, :bool, default: false
   end
 
   MATCH_OPERATOR_EXCLUDE = '!'
@@ -44,10 +46,40 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
         raise Fluent::ConfigError, "${tag_parts[n]} and __TAG_PARTS[n]__ placeholder does not support range specify at #{rule}"
       end
 
-      invert = rule.invert ? MATCH_OPERATOR_EXCLUDE : ""
-      @rewriterules.push([record_accessor_create(rule.key), rule.pattern, invert, rule.tag, rule.label])
-      rewriterule_names.push(rule.key + invert + rule.pattern.to_s)
-      log.info "adding rewrite_tag_filter rule: #{rule.key} #{@rewriterules.last}"
+      if rule.key.nil?
+        unless rule.default
+          raise Fluent::ConfigError, "Non-default rules must specify a key"
+        end
+      end
+
+      if rule.pattern.nil?
+        unless rule.default
+          raise Fluent::ConfigError, "Non-default rules must specify a pattern"
+        end
+      end
+
+      if rule.default
+        if rule.invert
+          raise Fluent::ConfigError, "Can't invert a default rule"
+        end
+        unless rule.key.nil?
+          raise Fluent::ConfigError, "Can't specify a key for a default rule"
+        end
+        unless rule.pattern.nil?
+          raise Fluent::ConfigError, "Can't specify a pattern for a default rule"
+        end
+      end
+
+      if rule.default
+        @rewriterules.push([nil, nil, nil, rule.tag, rule.label, rule.default])
+        rewriterule_names.push("default rule")
+        log.info "adding default rewrite_tag_filter rule: #{@rewriterules.last}"
+      else
+        invert = rule.invert ? MATCH_OPERATOR_EXCLUDE : ""
+        @rewriterules.push([record_accessor_create(rule.key), rule.pattern, invert, rule.tag, rule.label, rule.default])
+        rewriterule_names.push(rule.key + invert + rule.pattern.to_s)
+        log.info "adding rewrite_tag_filter rule: #{rule.key} #{@rewriterules.last}"
+      end
     end
 
     if conf.keys.any? {|k| k.start_with?("rewriterule") }
@@ -115,17 +147,19 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   end
 
   def rewrite_tag(tag, record, placeholder)
-    @rewriterules.each do |record_accessor, regexp, match_operator, rewritetag, rewritelabel|
-      rewritevalue = record_accessor.call(record).to_s
-      next if rewritevalue.empty? && match_operator != MATCH_OPERATOR_EXCLUDE
-      last_match = regexp_last_match(regexp, rewritevalue)
-      case match_operator
-      when MATCH_OPERATOR_EXCLUDE
-        next if last_match
-      else
-        next if !last_match
-        backreference_table = get_backreference_table(last_match.captures)
-        rewritetag = rewritetag.gsub(/\$\d+/, backreference_table)
+    @rewriterules.each do |record_accessor, regexp, match_operator, rewritetag, rewritelabel, default|
+      unless default
+        rewritevalue = record_accessor.call(record).to_s
+        next if rewritevalue.empty? && match_operator != MATCH_OPERATOR_EXCLUDE
+        last_match = regexp_last_match(regexp, rewritevalue)
+        case match_operator
+        when MATCH_OPERATOR_EXCLUDE
+          next if last_match
+        else
+          next if !last_match
+          backreference_table = get_backreference_table(last_match.captures)
+          rewritetag = rewritetag.gsub(/\$\d+/, backreference_table)
+        end
       end
       rewritetag = rewritetag.gsub(/(\${[a-z_]+(\[[0-9]+\])?}|__[A-Z_]+__)/) do
         log.warn "rewrite_tag_filter: unknown placeholder found. :placeholder=>#{$1} :tag=>#{tag} :rewritetag=>#{rewritetag}" unless placeholder.include?($1)
@@ -170,4 +204,3 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     return result
   end
 end
-
