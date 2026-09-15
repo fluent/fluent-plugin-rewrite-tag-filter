@@ -212,27 +212,29 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal 'not_start_with_www', events[2][0] # tag
     end
 
-    test "split by tag" do
+    data("dollar style" => "${tag_parts[%d]}",
+         "underscore style" => "__TAG_PARTS[%d]__")
+    test "split by tag" do |style|
       config = %[
         <rule>
           key user_name
           pattern ^Lynn Minmay$
-          tag vip.${tag_parts[1]}.remember_love
+          tag vip.#{style % 1}.remember_love
         </rule>
         <rule>
           key user_name
           pattern ^Harlock$
-          tag ${tag_parts[2]}.${tag_parts[0]}.${tag_parts[1]}
+          tag #{style % 2}.#{style % 0}.#{style % 1}
         </rule>
         <rule>
           key  world
           pattern ^(alice|chaos)$
-          tag application.${tag_parts[0]}.$1_server
+          tag application.#{style % 0}.$1_server
         </rule>
         <rule>
           key world
           pattern ^[a-z]+$
-          tag application.${tag_parts[1]}.future_server
+          tag application.#{style % 1}.future_server
         </rule>
       ]
       d = create_driver(config)
@@ -250,6 +252,47 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal 'application.production.future_server', events[2][0]
       assert_equal 'vip.production.remember_love', events[3][0]
       assert_equal 'api.game.production', events[4][0]
+    end
+
+    test "underscore style placeholder for tag and hostname" do
+      config = %[
+        <rule>
+          key domain
+          pattern ^(www)$
+          tag site.__TAG__.$1
+        </rule>
+        <rule>
+          key domain
+          pattern ^news$
+          tag site.__HOSTNAME__
+        </rule>
+      ]
+      d = create_driver(config)
+      d.run(default_tag: "input.access") do
+        d.feed({'domain' => 'www'})
+        d.feed({'domain' => 'news'})
+      end
+      events = d.events
+      assert_equal 2, events.length
+      assert_equal 'site.input.access.www', events[0][0]
+      assert_equal "site.#{`hostname`.chomp}", events[1][0]
+    end
+
+    test "adjacent placeholders are expanded one by one" do
+      config = %[
+        <rule>
+          key world
+          pattern ^chaos$
+          tag __TAG_PARTS[0]____TAG_PARTS[1]__
+        </rule>
+      ]
+      d = create_driver(config)
+      d.run(default_tag: "game.production.api") do
+        d.feed({'world' => 'chaos'})
+      end
+      events = d.events
+      assert_equal 1, events.length
+      assert_equal 'gameproduction', events[0][0]
     end
 
     sub_test_case "expansion runs only once" do
