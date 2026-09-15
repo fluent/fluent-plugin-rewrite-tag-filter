@@ -135,7 +135,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   def expand_tag(rewritetag, backreference_table, placeholder, tag)
     # Backreferences and placeholders are expanded in one pass, so text taken
     # from a record can never turn into a placeholder.
-    rewritetag.gsub(/(\$\d+)|(\${[a-z_]+(?:\[[0-9]+\])?}|__[A-Z_]+__)/) do
+    rewritetag.gsub(/(\$\d+)|(\${[a-z_]+(?:\[[0-9]+\])?}|__TAG_PARTS\[[0-9]+\]__|__[A-Z_]+?__)/) do
       if $1
         # An invert rule has no captures, so "$1" stays as it is written.
         backreference_table ? backreference_table[$1] : $1
