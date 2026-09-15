@@ -119,21 +119,31 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       rewritevalue = record_accessor.call(record).to_s
       next if rewritevalue.empty? && match_operator != MATCH_OPERATOR_EXCLUDE
       last_match = regexp_last_match(regexp, rewritevalue)
+      backreference_table = nil
       case match_operator
       when MATCH_OPERATOR_EXCLUDE
         next if last_match
       else
         next if !last_match
         backreference_table = get_backreference_table(last_match.captures)
-        rewritetag = rewritetag.gsub(/\$\d+/, backreference_table)
       end
-      rewritetag = rewritetag.gsub(/(\${[a-z_]+(\[[0-9]+\])?}|__[A-Z_]+__)/) do
-        log.warn "rewrite_tag_filter: unknown placeholder found. :placeholder=>#{$1} :tag=>#{tag} :rewritetag=>#{rewritetag}" unless placeholder.include?($1)
-        placeholder[$1]
-      end
-      return rewritetag, rewritelabel
+      return expand_tag(rewritetag, backreference_table, placeholder, tag), rewritelabel
     end
     return nil, nil
+  end
+
+  def expand_tag(rewritetag, backreference_table, placeholder, tag)
+    # Backreferences and placeholders are expanded in one pass, so text taken
+    # from a record can never turn into a placeholder.
+    rewritetag.gsub(/(\$\d+)|(\${[a-z_]+(?:\[[0-9]+\])?}|__[A-Z_]+__)/) do
+      if $1
+        # An invert rule has no captures, so "$1" stays as it is written.
+        backreference_table ? backreference_table[$1] : $1
+      else
+        log.warn "rewrite_tag_filter: unknown placeholder found. :placeholder=>#{$2} :tag=>#{tag} :rewritetag=>#{rewritetag}" unless placeholder.include?($2)
+        placeholder[$2]
+      end
+    end
   end
 
   def regexp_last_match(regexp, rewritevalue)

@@ -252,6 +252,64 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal 'api.game.production', events[4][0]
     end
 
+    sub_test_case "expansion runs only once" do
+      test "record value is not read as a placeholder" do
+        config = %[
+          <rule>
+            key domain
+            pattern ^(.+)$
+            tag site.$1
+          </rule>
+        ]
+        d = create_driver(config)
+        d.run(default_tag: "input.access") do
+          d.feed({'domain' => '${hostname}'})
+          d.feed({'domain' => '__TAG__'})
+          d.feed({'domain' => 'a${unknown}b'})
+        end
+        events = d.events
+        assert_equal 3, events.length
+        assert_equal 'site.${hostname}', events[0][0]
+        assert_equal 'site.__TAG__', events[1][0]
+        assert_equal 'site.a${unknown}b', events[2][0]
+      end
+
+      test "incoming tag is not read as a backreference" do
+        config = %[
+          <rule>
+            key domain
+            pattern ^(www)\.google\.com$
+            tag ${tag}.$1
+          </rule>
+        ]
+        d = create_driver(config)
+        d.run(default_tag: "incoming.$1") do
+          d.feed({'domain' => 'www.google.com'})
+        end
+        events = d.events
+        assert_equal 1, events.length
+        assert_equal 'incoming.$1.www', events[0][0]
+      end
+
+      test "invert rule keeps a backreference as it is written" do
+        config = %[
+          <rule>
+            key domain
+            pattern ^www\..+$
+            tag other.$1
+            invert true
+          </rule>
+        ]
+        d = create_driver(config)
+        d.run(default_tag: "input.access") do
+          d.feed({'domain' => 'maps.google.com'})
+        end
+        events = d.events
+        assert_equal 1, events.length
+        assert_equal 'other.$1', events[0][0]
+      end
+    end
+
     test "invalid_byte (UTF-8)" do
       config = %[
         <rule>
