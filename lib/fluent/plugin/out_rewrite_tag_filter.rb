@@ -157,6 +157,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   def get_backreference_table(elements)
     hash_table = Hash.new
     elements.each.with_index(1) do |value, index|
+      # An optional group that did not participate in the match is nil.
+      value = value.to_s
       hash_table["$#{index}"] = @capitalize_regex_backreference ? value.capitalize : value
     end
     return hash_table
