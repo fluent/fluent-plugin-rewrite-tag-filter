@@ -33,6 +33,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   end
 
   MATCH_OPERATOR_EXCLUDE = '!'
+  # The instances that are sending records to @ERROR, for the current fiber. One key for all the instances.
+  SENDING_TO_ERROR_KEY = :rewrite_tag_filter_sending_to_error
   # A re-emitted event that comes back to this plugin is processed again in the same thread, nested in the emit.
   # It is stopped at max_reemit_depth instead of growing until SystemStackError stops Fluentd.
   # Each pass uses the stack of the thread. The stack of an input thread ran out after about 270 passes on Ruby 3.4,
@@ -114,26 +116,53 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   # records for that label to @ERROR, so the other records are re-emitted and not sent to @ERROR twice. Without it,
   # raise the error as in earlier versions, so that the input sees it. Raise it also when this plugin is in
   # <label @ERROR>, because the records sent to @ERROR would come back to this plugin until the stack runs out.
+  #
+  # The records sent to @ERROR can also come back through another label, for example with relabel in <label @ERROR>.
+  # When they come back to this plugin and hit a label that is not defined again, throw back to where they were sent,
+  # and raise the error there, as if they had not been sent to @ERROR. Raising it at the inner level instead would let
+  # an outer out_copy send the records to its next <store> a second time.
   def get_router_or_emit_errors(label)
     get_router(label)
   rescue ArgumentError => e
     raise unless error_label_defined? && !in_error_label?
-    yield e
+    sending = (Thread.current[SENDING_TO_ERROR_KEY] ||= {})
+    throw sending[object_id] if sending.key?(object_id)
+    tag = Object.new
+    sent = false
+    sending[object_id] = tag
+    begin
+      catch(tag) do
+        yield e
+        sent = true
+      end
+    ensure
+      sending.delete(object_id)
+    end
+    raise e unless sent
     nil
   end
 
   # out_copy gives its own context router to the outputs in <store>, so this is also true for them.
   def in_error_label?
-    context_router.equal?(Fluent::Engine.root_agent.find_label(Fluent::RootAgent::ERROR_LABEL).event_router)
+    context_router.equal?(own_root_agent.find_label(Fluent::RootAgent::ERROR_LABEL).event_router)
   end
 
   def error_label_defined?
-    root_agent = Fluent::Engine.root_agent
+    root_agent = own_root_agent
     return false if root_agent.nil?
     root_agent.find_label(Fluent::RootAgent::ERROR_LABEL)
     true
   rescue ArgumentError
     false
+  end
+
+  # The root agent of the configuration that this plugin belongs to. Fluent::Engine.root_agent is the newest one: a
+  # reload replaces it before the old plugins stop. The handler of the router is the root agent, or the label that
+  # this plugin is in, and the label knows its root agent. The router of the test driver has no handler.
+  def own_root_agent
+    handler = router.respond_to?(:emit_error_handler) ? router.emit_error_handler : nil
+    handler = handler.root_agent if handler.is_a?(Fluent::Label)
+    handler.is_a?(Fluent::RootAgent) ? handler : Fluent::Engine.root_agent
   end
 
   def process(tag, es)
@@ -198,7 +227,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
           # record. This is the handler that the router calls for an error in emit_stream.
           error_es = Fluent::MultiEventStream.new
           label_event_streams.each_value { |new_es| new_es.each { |time, record| error_es.add(time, record) } }
-          Fluent::Engine.root_agent.handle_emits_error(tag, error_es, e)
+          own_root_agent.handle_emits_error(tag, error_es, e)
         end
         next unless labeled_router
         label_event_streams.each do |rewrited_tag, new_es|
