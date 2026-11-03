@@ -860,6 +860,14 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal([["error", "input", { "message" => "x" }]] * 2, events.select { |e| e[0] == "error" })
     end
 
+    # Fluentd counts num_errors when process raises the error. The records sent to @ERROR are counted in emit_records.
+    data(EMIT_MODES)
+    test "the stream is counted in num_errors once, as when the error is raised" do |mode|
+      run_fluentd(undefined_label_conf(mode))
+      plugin = Fluent::Engine.root_agent.outputs.find { |o| o.is_a?(Fluent::Plugin::RewriteTagFilterOutput) }
+      assert_equal([1, RECORDS.size], [plugin.num_errors, plugin.emit_records])
+    end
+
     test "in batch mode, the records for it are sent to @ERROR as one stream, with one warning" do
       run_fluentd(undefined_label_conf("batch"))
       warnings = $log.out.logs.grep(/@UNDEFINED label not found/)
