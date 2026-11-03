@@ -800,8 +800,9 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal(expected, events)
     end
 
-    # Two instances in a loop, both inside out_copy, after 10 filters, with the largest max_reemit_depth. The events pass
-    # through 100 instances in a row. Run in a thread, which has a smaller stack than the main thread, as an input does.
+    # A loop through two <match> sections, both with out_copy, after 10 filters, with the largest max_reemit_depth. The
+    # events are passed 100 times in a row. Run in a thread, which has a smaller stack than the main thread, as an input
+    # does.
     test "the largest max_reemit_depth does not run out of the stack" do
       filters = (1..10).map { "<filter **>\n@type record_transformer\n</filter>\n" }.join
       rtf = ->(pattern, prefix) do

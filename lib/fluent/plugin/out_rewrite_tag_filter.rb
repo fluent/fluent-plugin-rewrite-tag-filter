@@ -36,8 +36,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   # A re-emitted event that comes back to this plugin is processed again in the same thread, nested in the emit.
   # It is stopped at max_reemit_depth instead of growing until SystemStackError stops Fluentd.
   # Each pass uses the stack of the thread. The stack of an input thread ran out after about 270 passes on Ruby 3.4,
-  # and after about 160 with out_copy in the path. 50 leaves room for a loop through two instances, which uses about
-  # twice the stack for each depth.
+  # and after about 160 with out_copy in the path. The depth is counted for each <match>, so a loop through two <match>
+  # sections uses about twice the stack for each depth. 50 leaves room for it.
   MAX_REEMIT_DEPTH_LIMIT = 50
   # One key for all the instances: a Symbol made per instance would stay in memory after a reload.
   REEMIT_DEPTH_KEY = :rewrite_tag_filter_reemit_depth

@@ -209,7 +209,7 @@ A re-emitted event can come back to this plugin, for example with `tag new.${tag
 
 An event that comes back many times can still leave the loop, for example when `remove_tag_regexp` and `tag ${tag}` remove one part of the tag on each pass. Raise `max_reemit_depth` for such a configuration. It can be 50 at most, because each pass uses the stack of the thread: the stack of an input thread ran out after about 270 passes on Ruby 3.4, and after about 160 with `out_copy` in the path.
 
-The depth is counted for each plugin instance and each fiber, only while the emits are nested. A loop through a buffered output, or through `out_forward` and `in_forward`, starts again at depth 0 on each pass, and is not stopped.
+The depth is counted for each `<match>` (or `<store>` of `out_copy`) and each fiber, only while the emits are nested, so a loop through two `<match>` sections passes the events about twice as many times as `max_reemit_depth`. A loop through a buffered output, or through `out_forward` and `in_forward`, starts again at depth 0 on each pass, and is not stopped.
 
 ### Nested attributes
 
