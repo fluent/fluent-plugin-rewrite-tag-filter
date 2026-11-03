@@ -273,6 +273,10 @@ By default, execute command as `hostname` to get full hostname.
 On your needs, it could override hostname command using `hostname_command` option.  
 It comes short hostname with `hostname_command hostname -s` configuration specified.
 
+The command runs only once at startup, and only when a rule uses `${hostname}` or `__HOSTNAME__`. The first line of its output, with surrounding spaces removed, is used. When the command cannot run, fails, prints nothing, or prints several lines, a warning is logged and Fluentd keeps starting.
+
+To pick up a new hostname, reload the configuration, for example with `systemctl reload fluentd` or `SIGHUP` to the supervisor. `SIGUSR1` does not reload it. See [docs/hostname.md](docs/hostname.md) for the other ways and how to see the hostname in use.
+
 #### Placeholder Usage
 
 It's a sample to rewrite a tag with placeholder.

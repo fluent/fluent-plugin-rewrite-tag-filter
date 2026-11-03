@@ -9,6 +9,60 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     Fluent::Test::Driver::Output.new(Fluent::Plugin::RewriteTagFilterOutput).configure(conf)
   end
 
+  sub_test_case "hostname_command" do
+    def hostname_conf(tag, command)
+      "hostname_command #{command}\n<rule>\n key message\n pattern /^(a)$/\n tag #{tag}\n</rule>\n"
+    end
+
+    def warnings_of(d)
+      d.logs.grep(/\[warn\]/)
+    end
+
+    # A command that works the same on sh and cmd.exe. A value that starts with a quote is read as a quoted string
+    # in the configuration, so the path of ruby is not quoted.
+    def ruby_command(code)
+      %Q[#{RbConfig.ruby} -e "#{code}"]
+    end
+
+    data(
+      "several lines"   => ["puts 'h1'; puts 'h2'", "h1", "hostname_command printed several lines, so only the first line is used"],
+      "failed"          => ["exit 1",               "",   "hostname_command failed"],
+      "prints nothing"  => ["exit 0",               "",   "hostname_command printed nothing"],
+    )
+    test "is warned when its output cannot be used" do |(code, hostname, message)|
+      d = create_driver(hostname_conf("t.${hostname}", ruby_command(code)))
+      assert_equal(hostname, d.instance.instance_variable_get(:@hostname))
+      assert_true(warnings_of(d).any? { |l| l.include?(message) }, warnings_of(d).inspect)
+    end
+
+    test "is warned when it cannot run (#100)" do
+      d = create_driver(hostname_conf("t.${hostname}", "no_such_command_for_test"))
+      assert_equal("", d.instance.instance_variable_get(:@hostname))
+      assert_true(warnings_of(d).any? { |l| l.include?("hostname_command could not run") }, warnings_of(d).inspect)
+    end
+
+    test "output is trimmed" do
+      d = create_driver(hostname_conf("t.${hostname}", ruby_command("puts '  h1  '")))
+      assert_equal("h1", d.instance.instance_variable_get(:@hostname))
+      assert_equal([], warnings_of(d))
+    end
+
+    data(
+      "fails"             => :failing,
+      "is missing (#100)" => "no_such_command_for_test",
+    )
+    test "does not run when no rule uses the hostname" do |command|
+      command = ruby_command("exit 1") if command == :failing
+      d = create_driver(hostname_conf("t.$1", command))
+      assert_equal([], warnings_of(d))
+    end
+
+    test "runs when __HOSTNAME__ is used" do
+      d = create_driver(hostname_conf("t.__HOSTNAME__", ruby_command("puts 'h1'")))
+      assert_equal("h1", d.instance.instance_variable_get(:@hostname))
+    end
+  end
+
   sub_test_case "configure" do
     data("empty" => "",
          "line style" => "rewriterule1 foo ^foo$ new_tag")

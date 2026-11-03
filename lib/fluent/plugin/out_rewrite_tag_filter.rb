@@ -37,7 +37,9 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
     @rewriterules = []
     rewriterule_names = []
-    @hostname = `#{@hostname_command}`.chomp
+    # The command does not run when no rule uses the hostname, so a missing command does not stop the startup.
+    uses_hostname = @rules.any? { |rule| rule.tag.include?('${hostname}') || rule.tag.include?('__HOSTNAME__') }
+    @hostname = uses_hostname ? get_hostname : ''
 
     @rules.each do |rule|
       unless rule.tag.match(/\$\{tag_parts\[\d\.\.\.?\d\]\}/).nil? or rule.tag.match(/__TAG_PARTS\[\d\.\.\.?\d\]__/).nil?
@@ -71,6 +73,22 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     end
 
     @batch_mode = @emit_mode == :batch
+  end
+
+  # hostname_command runs only once here. A change of the hostname is picked up when the configuration is reloaded.
+  def get_hostname
+    begin
+      output = `#{@hostname_command}`
+    rescue SystemCallError => e
+      log.warn "rewrite_tag_filter: hostname_command could not run, so ${hostname} expands to an empty string", hostname_command: @hostname_command, error: e
+      return ''
+    end
+    lines = output.lines.map(&:strip).reject(&:empty?)
+    hostname = lines.first.to_s
+    log.warn "rewrite_tag_filter: hostname_command failed", hostname_command: @hostname_command, status: $?.exitstatus unless $?.success?
+    log.warn "rewrite_tag_filter: hostname_command printed nothing, so ${hostname} expands to an empty string", hostname_command: @hostname_command if hostname.empty?
+    log.warn "rewrite_tag_filter: hostname_command printed several lines, so only the first line is used", hostname_command: @hostname_command, hostname: hostname if lines.size > 1
+    hostname
   end
 
   def multi_workers_ready?
