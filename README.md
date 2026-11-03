@@ -403,6 +403,8 @@ message: `{"domain": "www.example.com"}` will get its tag changed to
 `{"domain": "api.example.com"}` will get its tag changed to `other.api` and
  be sent to label `@other`, which must be defined with `<label>`.
 
+The label is looked up at startup, as `@label` is. During a reload, the events that this plugin re-emits go to the label of the configuration that the `<match>` section belongs to, until that configuration is shut down. A label that is not defined in that configuration raises the error until then, even when the new configuration defines it.
+
 ## Example
 
 - Example1: how to analyze response_time, response_code and user_agent for each virtual domain websites.  

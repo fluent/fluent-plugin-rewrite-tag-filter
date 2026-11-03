@@ -94,10 +94,60 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     end
 
     @batch_mode = @emit_mode == :batch
+
+    @label_routers = {}
+    @label_lookup_errors = {}
+    resolve_label_routers
   end
 
   def multi_workers_ready?
     true
+  end
+
+  def start
+    super
+    # A label that was not found in configure is looked up again, in case it was added after this plugin.
+    @label_lookup_errors = {}
+    resolve_label_routers
+  end
+
+  # The outputs of this configuration have flushed at shutdown. The events for the labels that still come, from a thread
+  # that outlives its plugin, go to the configuration that Fluentd runs, as before this plugin looked up the labels once.
+  def after_shutdown
+    @label_routers = {}
+    @label_lookup_errors = {}
+    super
+  end
+
+  # Looked up once, as @label is, so during a reload the events go to the labels of this configuration, whose outputs
+  # flush at shutdown, not to the new one, which may not be configured or started yet. The error of a label that is not
+  # defined is kept. @ERROR is set up after the other <label> sections, so it may be found only in start.
+  def resolve_label_routers
+    @rules.each do |rule|
+      label = rule.label
+      next if label.nil? || label.empty? || @label_routers.key?(label) || @label_lookup_errors.key?(label)
+      begin
+        @label_routers[label] = get_router(label)
+      rescue ArgumentError => e
+        next if label == Fluent::RootAgent::ERROR_LABEL && !started?
+        @label_lookup_errors[label] = e
+      end
+    end
+  end
+
+  # The router of the label of a rule, found in configure or start. For a label that is not defined, the kept error is
+  # raised again as a new error, with the frames of the lookup in Fluentd and then the backtrace of this call, so that
+  # its location and the logs are as when the label is looked up here.
+  def resolved_router(label)
+    return router if label.nil? || label.empty?
+    labeled_router = @label_routers[label]
+    return labeled_router if labeled_router
+    if (kept = @label_lookup_errors[label])
+      lookup_frames = kept.backtrace.take_while { |line| !line.include?(__FILE__) }
+      raise kept.class, kept.message, lookup_frames + caller
+    end
+    # @ERROR in a <label> before start, and any label after shutdown.
+    get_router(label)
   end
 
   def get_router(tgt_label)
@@ -169,14 +219,14 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
         next
       end
       if new_event_streams.nil?
-        get_router(rewrited_label).emit(rewrited_tag, time, record)
+        resolved_router(rewrited_label).emit(rewrited_tag, time, record)
       else
         new_event_streams[rewrited_label][rewrited_tag].add(time, record)
       end
     end
     if !new_event_streams.nil?
       new_event_streams.each do |rewrited_label, label_event_streams |
-        labeled_router = get_router(rewrited_label)
+        labeled_router = resolved_router(rewrited_label)
         label_event_streams.each do |rewrited_tag, new_es|
             labeled_router.emit_stream(rewrited_tag, new_es)
         end
