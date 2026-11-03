@@ -350,6 +350,8 @@ It's a sample to rewrite a tag with placeholder.
 In addition to changing tags, you can also change event's route by setting
  the label for the re-emitted event.
 
+A record for a label that is not defined with `<label>` is sent to `@ERROR` when `<label @ERROR>` is defined, and the other records are re-emitted. Without `<label @ERROR>`, the error goes back to the input, as before.
+
 For example, given this configuration:
 
 ```

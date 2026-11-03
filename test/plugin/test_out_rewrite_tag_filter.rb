@@ -12,6 +12,8 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     conf << "</rule>\n"
   end
 
+  EMIT_MODES = { "batch" => "batch", "record" => "record" }.freeze
+
   def create_driver(conf)
     Fluent::Test::Driver::Output.new(Fluent::Plugin::RewriteTagFilterOutput).configure(conf)
   end
@@ -610,6 +612,40 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       d = create_driver(rules)
       d.run(default_tag: "input") { [record, record].each { |r| d.feed(r) } }
       assert_equal(["other", "other"], d.events.map(&:first))
+      assert_equal([], d.error_events)
+    end
+  end
+
+  sub_test_case "a label that is not defined" do
+    def run_with_undefined_label(mode)
+      rules = rule_conf(pattern: "/^x$/", tag: "new.${tag}", label: "@UNDEFINED", head: "emit_mode #{mode}") + rule_conf(pattern: "/^y$/", tag: "ok.${tag}")
+      d = create_driver(rules)
+      # The test driver routes any label. Look the label up in Fluentd, which raises the error for a label that is not defined.
+      d.instance.define_singleton_method(:get_router) do |label|
+        label == "@UNDEFINED" ? Fluent::Engine.root_agent.find_label(label).event_router : super(label)
+      end
+      [d, -> { d.run(default_tag: "input") { d.feed([[event_time, { "message" => "y" }], [event_time, { "message" => "x" }], [event_time, { "message" => "y" }]]) } }]
+    end
+
+    data(EMIT_MODES)
+    test "with <label @ERROR>, only the records for it go to @ERROR" do |mode|
+      Fluent::Engine.root_agent.add_label("@ERROR")
+      begin
+        d, run = run_with_undefined_label(mode)
+        run.call
+        assert_equal(["ok.input", "ok.input"], d.events.map(&:first))
+        assert_equal([{ "message" => "x" }], d.error_events.map { |_tag, _time, record, _error| record })
+        assert_equal("@UNDEFINED label not found", d.error_events.first[3].message)
+      ensure
+        Fluent::Engine.root_agent.labels.delete("@ERROR")
+      end
+    end
+
+    data(EMIT_MODES)
+    test "without <label @ERROR>, the error goes back to the input as before" do |mode|
+      d, run = run_with_undefined_label(mode)
+      error = assert_raise(ArgumentError) { run.call }
+      assert_equal("@UNDEFINED label not found", error.message)
       assert_equal([], d.error_events)
     end
   end
