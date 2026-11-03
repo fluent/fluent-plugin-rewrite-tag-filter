@@ -201,6 +201,12 @@ The `<label @UNMATCHED>` section must consume these records (for example, write 
 
 Alternatively, put `record_modifier` or `record_transformer` in front of this plugin so that the field always exists with a default value.
 
+### Records that cannot be processed
+
+A record that raises an error in a rule is sent to the `@ERROR` label alone, and the other records in the event stream are re-emitted as usual. So is a record for a label that is not defined with `<label>`. Without `<label @ERROR>`, Fluentd logs the record in a warning and discards it.
+
+A value in ASCII-8BIT, which `in_tail` gives when `encoding` is not set, is read as UTF-8 when the pattern has non-ASCII characters, so the pattern can match it. The bytes that are not valid UTF-8 are replaced with `?` for the pattern, as in a string with an invalid encoding. A pattern with only ASCII characters matches the bytes as before.
+
 ### Nested attributes
 
 Dot notation:
@@ -240,6 +246,8 @@ These example configurations can process nested attributes like following:
 ```
 
 When original tag is `kubernetes.var.log`, this will be converted to `default.kubernetes.var.log`.
+
+When a parent of the nested key is not a Hash or an Array, such as `{"kubernetes": "text"}` for the key above, the key is treated as missing (see "Handling records that do not have the key").
 
 ### Tag placeholder
 
