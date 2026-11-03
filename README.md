@@ -387,7 +387,7 @@ message: `{"domain": "www.example.com"}` will get its tag changed to
 
 A record for a label that is not defined with `<label>`:
 
-* With `<label @ERROR>`, it is sent to `@ERROR`, and the other records are re-emitted. In `batch` mode, the records for the label are sent as one stream, so Fluentd logs one warning for them.
+* With `<label @ERROR>`, it is sent to `@ERROR`, and the other records are re-emitted. In `batch` mode, the records for the label are sent as one stream, so Fluentd logs one warning for them. In either mode, the stream is counted once in `num_errors` of this output, as when the error is raised, and all the records in it are counted in `emit_records`.
 * Without `<label @ERROR>`, the error goes back to the input, as in earlier versions. The other records that are already re-emitted are re-emitted again if the input retries.
 * When this plugin is in `<label @ERROR>`, or the records sent to `@ERROR` come back to it through another label, such as with `relabel`, the error is raised instead, so that they do not loop. Something must catch it, such as `<store ignore_error>` of `out_copy`. When this plugin is directly in a `<match>` in `<label @ERROR>`, Fluentd sends the stream to `@ERROR` again and it loops, as in earlier versions.
 

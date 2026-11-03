@@ -175,6 +175,19 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
         end
       end
     end
+    # Records were sent to @ERROR instead of raising the error, so count the stream in num_errors, as Fluentd does when
+    # process raises it.
+    count_num_error unless lookup_errors.empty?
+  end
+
+  # Fluentd has no method to count num_errors of an output. 1.14 and later count it in @num_errors_metrics, and earlier
+  # versions in @num_errors, with @counter_mutex or @counters_monitor.
+  def count_num_error
+    if @num_errors_metrics
+      @num_errors_metrics.inc
+    else
+      (@counter_mutex || @counters_monitor).synchronize { @num_errors += 1 }
+    end
   end
 
   def rewrite_tag(tag, record, placeholder)
