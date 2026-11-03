@@ -48,6 +48,8 @@ For more details, see [Plugin Management](https://docs.fluentd.org/deployment/pl
   * Default value: `hostname`
 * **emit_mode** (enum) (required): Specify emit_mode to `batch` or `record`. `batch` will emit events per rewritten tag, and decrease IO. `record` will emit events per record.
   * Default value: `batch`
+* **max_reemit_depth** (integer) (optional): How many times in a row an event can come back to this plugin before it is stopped as a loop. (see the section of "Events that keep coming back")
+  * Default value: `10`
 
 ### \<rule\> section (optional) (multiple)
 
@@ -203,7 +205,9 @@ Alternatively, put `record_modifier` or `record_transformer` in front of this pl
 
 ### Events that keep coming back
 
-An event that comes back to this plugin 10 times in a row, for example with `tag new.${tag}` in `<match **>`, is sent to `@ERROR`, with `ReemitLoopError`, instead of being re-emitted forever. If the error events come back to this plugin too, for example when it is in `<label @ERROR>`, they are dropped with an error log. `label ""` is the same as no label, so an event with the unchanged tag and `label ""` is skipped.
+A re-emitted event can come back to this plugin, for example with `tag new.${tag}` in `<match **>`, or with `label @ROOT` in a top-level `<match>`. An event that comes back `max_reemit_depth` times in a row (10 by default) is stopped with `ReemitLoopError`, instead of being re-emitted until Fluentd stops with `SystemStackError`. The event is sent to `@ERROR` when `<label @ERROR>` is defined. Without it, the error goes back to the input, like other errors. If the events sent to `@ERROR` come back to this plugin too, for example when it is in `<label @ERROR>`, they are dropped, and the records are written to the error log.
+
+An event that comes back many times can still leave the loop, for example when `remove_tag_regexp` and `tag ${tag}` remove one part of the tag on each pass. Raise `max_reemit_depth` for such a configuration.
 
 ### Nested attributes
 
@@ -353,6 +357,8 @@ It's a sample to rewrite a tag with placeholder.
 
 In addition to changing tags, you can also change event's route by setting
  the label for the re-emitted event.
+
+A record for a label that is not defined with `<label>` is sent to `@ERROR` when `<label @ERROR>` is defined, and the other records are re-emitted. Without `<label @ERROR>`, the error goes back to the input, as before.
 
 For example, given this configuration:
 

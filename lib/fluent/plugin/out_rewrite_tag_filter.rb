@@ -16,6 +16,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   config_param :hostname_command, :string, :default => 'hostname'
   desc "The emit mode. If `batch`, this plugin will emit events per rewritten tag."
   config_param :emit_mode, :enum, list: [:record, :batch], default: :batch
+  desc "How many times in a row an event can come back to this plugin before it is stopped as a loop."
+  config_param :max_reemit_depth, :integer, default: 10
 
   config_section :rule, param_name: :rules, multi: true do
     desc "The field name to which the regular expression is applied"
@@ -32,8 +34,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
   MATCH_OPERATOR_EXCLUDE = '!'
   # A re-emitted event that comes back to this plugin is processed again in the same thread, nested in the emit.
-  # Stop it at this depth instead of letting it grow until SystemStackError stops Fluentd.
-  MAX_REEMIT_DEPTH = 10
+  # It is stopped at max_reemit_depth instead of growing until SystemStackError stops Fluentd.
   # One key for all the instances: a Symbol made per instance would stay in memory after a reload.
   REEMIT_DEPTH_KEY = :rewrite_tag_filter_reemit_depth
 
@@ -41,6 +42,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
   def configure(conf)
     super
+
+    raise Fluent::ConfigError, "max_reemit_depth must be 1 or more" if @max_reemit_depth < 1
 
     @rewriterules = []
     rewriterule_names = []
@@ -85,7 +88,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   end
 
   def get_router(tgt_label)
-    label_router = if no_label?(tgt_label)
+    label_router = if tgt_label.nil? || tgt_label.empty?
         router
     else
         event_emitter_router(tgt_label)
@@ -94,9 +97,24 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     return label_router
   end
 
-  # Label "" is the same as no label: the event goes back to the router that sent it here.
-  def no_label?(label)
-    label.nil? || label.empty?
+  # A label that is not defined raises ArgumentError when its router is looked up. With <label @ERROR>, send only the
+  # records for that label to @ERROR, so the other records are re-emitted and not sent to @ERROR twice. Without it,
+  # raise the error as before, so that the input sees it.
+  def get_router_or_emit_errors(label)
+    get_router(label)
+  rescue ArgumentError => e
+    raise unless error_label_defined?
+    yield e
+    nil
+  end
+
+  def error_label_defined?
+    root_agent = Fluent::Engine.root_agent
+    return false if root_agent.nil?
+    root_agent.find_label(Fluent::RootAgent::ERROR_LABEL)
+    true
+  rescue ArgumentError
+    false
   end
 
   def process(tag, es)
@@ -105,15 +123,21 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     depth = depths[object_id] || 0
     depths[object_id] = depth + 1
     begin
-      if depth < MAX_REEMIT_DEPTH
+      if depth < @max_reemit_depth
         rewrite_and_emit(tag, es)
-      elsif depth == MAX_REEMIT_DEPTH
-        error = ReemitLoopError.new("events came back to this plugin #{depth} times in a row. Use a tag that this <match> does not cover")
+      elsif depth == @max_reemit_depth
+        error = ReemitLoopError.new("events came back to this plugin #{depth} times in a row. Check the tag and the label of the rules, or max_reemit_depth")
+        # Without <label @ERROR>, raise the error like other errors, so that the input sees it.
+        raise error unless error_label_defined?
+        # Send them to @ERROR here instead of raising the error, so the events that come back from @ERROR are still
+        # counted at this depth.
         es.each { |time, record| router.emit_error_event(tag, time, record, error) }
       else
         # The error events came back too, for example when this plugin is in <label @ERROR>. Sending them to @ERROR
-        # again would loop forever, so drop them.
-        log.error "rewrite_tag_filter: events sent to @ERROR came back to this plugin, so they are dropped. Use a tag that this <match> does not cover", tag: tag, records: es.size
+        # again would loop forever, so drop them, and keep the records in the log.
+        es.each do |time, record|
+          log.error "rewrite_tag_filter: an event sent to @ERROR came back to this plugin, so it is dropped. Check the tag and the label of the rules", tag: tag, time: time, record: record
+        end
       end
     ensure
       if depth.zero?
@@ -130,20 +154,24 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
     es.each do |time, record|
       rewrited_tag, rewrited_label  = rewrite_tag(tag, record, placeholder)
-      if (rewrited_tag.nil? || tag == rewrited_tag) && no_label?(rewrited_label)
+      if (rewrited_tag.nil? || tag == rewrited_tag) && rewrited_label.nil?
         log.trace("rewrite_tag_filter: tag has not been rewritten", record)
         next
       end
       rewrited_tag = tag if rewrited_tag.nil?
       if new_event_streams.nil?
-        get_router(rewrited_label).emit(rewrited_tag, time, record)
+        labeled_router = get_router_or_emit_errors(rewrited_label) { |e| router.emit_error_event(tag, time, record, e) }
+        labeled_router.emit(rewrited_tag, time, record) if labeled_router
       else
         new_event_streams[rewrited_label][rewrited_tag].add(time, record)
       end
     end
     if !new_event_streams.nil?
       new_event_streams.each do |rewrited_label, label_event_streams |
-        labeled_router = get_router(rewrited_label)
+        labeled_router = get_router_or_emit_errors(rewrited_label) do |e|
+          label_event_streams.each_value { |new_es| new_es.each { |time, record| router.emit_error_event(tag, time, record, e) } }
+        end
+        next unless labeled_router
         label_event_streams.each do |rewrited_tag, new_es|
             labeled_router.emit_stream(rewrited_tag, new_es)
         end
