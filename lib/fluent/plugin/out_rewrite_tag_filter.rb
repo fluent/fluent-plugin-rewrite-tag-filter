@@ -97,7 +97,6 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
         log.trace("rewrite_tag_filter: tag has not been rewritten", record)
         next
       end
-      rewrited_tag = tag if rewrited_tag.nil?
       if new_event_streams.nil?
         get_router(rewrited_label).emit(rewrited_tag, time, record)
       else
