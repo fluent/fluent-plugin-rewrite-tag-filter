@@ -554,6 +554,54 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal(events, expected_events)
     end
 
+    test "relabel in batch mode" do
+      conf = %[
+          emit_mode batch
+          <rule>
+            key key
+            pattern /^(odd)$/
+            tag $1
+            label odd_label
+          </rule>
+          <rule>
+            key key
+            pattern /^(even)$/
+            tag ${tag}
+            label even_label
+          </rule>
+          <rule>
+            key key
+            pattern /^(.*)$/
+            tag $1
+          </rule>
+        ]
+      time = event_time
+      d = create_driver(conf)
+      # The router of each label is looked up once, and the events are emitted per label and tag.
+      mock.proxy(d.instance).get_router("odd_label").times(1)
+      mock.proxy(d.instance).get_router("even_label").times(1)
+      mock.proxy(d.instance).get_router(nil).times(1)
+      mock.proxy(d.instance.router).emit_stream(anything, anything).times(1)
+      mock.proxy(d.instance.router).emit(anything, anything, anything).times(0)
+      d.run(default_tag: "input") do
+        d.feed([[time, { "key" => "odd", "message" => "message-1" }],
+                [time, { "key" => "even", "message" => "message-2" }],
+                [time, { "key" => "zero", "message" => "message-3" }],
+                [time, { "key" => "odd", "message" => "message-4" }],
+                [time, { "key" => "even", "message" => "message-5" }],
+                [time, { "key" => "zero", "message" => "message-6" }]])
+      end
+      expected_events = [
+        ["odd", time, { "key" => "odd", "message" => "message-1" }],
+        ["odd", time, { "key" => "odd", "message" => "message-4" }],
+        ["input", time, { "key" => "even", "message" => "message-2" }],
+        ["input", time, { "key" => "even", "message" => "message-5" }],
+        ["zero", time, { "key" => "zero", "message" => "message-3" }],
+        ["zero", time, { "key" => "zero", "message" => "message-6" }],
+      ]
+      assert_equal(expected_events, d.events)
+    end
+
     sub_test_case "emit_mode" do
       test "record" do
         conf = %[
