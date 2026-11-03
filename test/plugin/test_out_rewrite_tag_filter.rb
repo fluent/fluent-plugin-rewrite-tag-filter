@@ -2,6 +2,20 @@ require 'helper'
 require 'tmpdir'
 require 'shellwords'
 
+# An output that keeps the events it gets, to see where Fluentd routes the events.
+class RewriteTagFilterTestCollectOutput < Fluent::Plugin::Output
+  Fluent::Plugin.register_output("rewrite_tag_filter_test_collect", self)
+  config_param :name, :string, default: "out"
+
+  def self.events
+    @events ||= []
+  end
+
+  def process(tag, es)
+    es.each { |_time, record| self.class.events << [@name, tag, record] }
+  end
+end
+
 class RewriteTagFilterOutputTest < Test::Unit::TestCase
   def setup
     Fluent::Test.setup
@@ -773,36 +787,112 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
   end
 
   sub_test_case "a label that is not defined" do
-    def run_with_undefined_label(mode)
+    teardown do
+      Fluent::Engine.init(Fluent::SystemConfig.new)
+    end
+
+    RECORDS = [{ "message" => "y" }, { "message" => "x" }, { "message" => "x" }, { "message" => "y" }].freeze
+
+    # Fluentd with its own router, which raises the error for a label that is not defined.
+    def run_fluentd(conf, label: nil)
+      RewriteTagFilterTestCollectOutput.events.clear
+      Fluent::Engine.run_configure(Fluent::Config.parse(conf, "(test)", "(test_dir)", syntax: :v1))
+      es = Fluent::MultiEventStream.new
+      RECORDS.each { |record| es.add(event_time, record) }
+      router = label ? Fluent::Engine.root_agent.find_label(label).event_router : Fluent::Engine.root_agent.event_router
+      router.emit_stream("input", es)
+      RewriteTagFilterTestCollectOutput.events
+    end
+
+    def undefined_label_conf(mode)
+      %[
+        <match input>
+          @type rewrite_tag_filter
+          emit_mode #{mode}
+          <rule>
+            key message
+            pattern /^x$/
+            tag new.${tag}
+            label @UNDEFINED
+          </rule>
+          <rule>
+            key message
+            pattern /^y$/
+            tag ok.${tag}
+          </rule>
+        </match>
+        <match ok.**>
+          @type rewrite_tag_filter_test_collect
+          name ok
+        </match>
+        <label @ERROR>
+          <match **>
+            @type rewrite_tag_filter_test_collect
+            name error
+          </match>
+        </label>
+      ]
+    end
+
+    data(EMIT_MODES)
+    test "with <label @ERROR>, only the records for it go to @ERROR" do |mode|
+      events = run_fluentd(undefined_label_conf(mode))
+      assert_equal([["ok", "ok.input", { "message" => "y" }], ["ok", "ok.input", { "message" => "y" }]], events.select { |e| e[0] == "ok" })
+      assert_equal([["error", "input", { "message" => "x" }], ["error", "input", { "message" => "x" }]], events.select { |e| e[0] == "error" })
+    end
+
+    test "in batch mode, the records for it are sent to @ERROR as one stream, with one warning" do
+      run_fluentd(undefined_label_conf("batch"))
+      warnings = $log.out.logs.grep(/@UNDEFINED label not found/)
+      assert_equal(1, warnings.size, warnings.inspect)
+      assert_match(/send an error event stream to @ERROR/, warnings.first)
+    end
+
+    # The records sent to @ERROR would come back to this plugin in <label @ERROR> until SystemStackError, so the error is
+    # raised, and out_copy with ignore_error goes on to the next <store>.
+    data(EMIT_MODES)
+    test "in <label @ERROR>, the error is raised instead of sending the records to @ERROR again" do |mode|
+      conf = %[
+        <label @ERROR>
+          <match **>
+            @type copy
+            <store ignore_error>
+              @type rewrite_tag_filter
+              emit_mode #{mode}
+              <rule>
+                key message
+                pattern /^x$/
+                tag new.${tag}
+                label @UNDEFINED
+              </rule>
+            </store>
+            <store>
+              @type rewrite_tag_filter_test_collect
+              name error
+            </store>
+          </match>
+        </label>
+      ]
+      events = run_fluentd(conf, label: "@ERROR")
+      assert_equal(RECORDS.map { |record| ["error", "input", record] }, events)
+    end
+
+    data(EMIT_MODES)
+    test "without <label @ERROR>, the error goes back to the input as before" do |mode|
       rules = rule_conf(pattern: "/^x$/", tag: "new.${tag}", label: "@UNDEFINED", head: "emit_mode #{mode}") + rule_conf(pattern: "/^y$/", tag: "ok.${tag}")
       d = create_driver(rules)
       # The test driver routes any label. Look the label up in Fluentd, which raises the error for a label that is not defined.
       d.instance.define_singleton_method(:get_router) do |label|
         label == "@UNDEFINED" ? Fluent::Engine.root_agent.find_label(label).event_router : super(label)
       end
-      [d, -> { d.run(default_tag: "input") { d.feed([[event_time, { "message" => "y" }], [event_time, { "message" => "x" }], [event_time, { "message" => "y" }]]) } }]
-    end
-
-    data(EMIT_MODES)
-    test "with <label @ERROR>, only the records for it go to @ERROR" do |mode|
-      Fluent::Engine.root_agent.add_label("@ERROR")
-      begin
-        d, run = run_with_undefined_label(mode)
-        run.call
-        assert_equal(["ok.input", "ok.input"], d.events.map(&:first))
-        assert_equal([{ "message" => "x" }], d.error_events.map { |_tag, _time, record, _error| record })
-        assert_equal("@UNDEFINED label not found", d.error_events.first[3].message)
-      ensure
-        Fluent::Engine.root_agent.labels.delete("@ERROR")
+      error = assert_raise(ArgumentError) do
+        d.run(default_tag: "input") { d.feed(RECORDS.map { |record| [event_time, record] }) }
       end
-    end
-
-    data(EMIT_MODES)
-    test "without <label @ERROR>, the error goes back to the input as before" do |mode|
-      d, run = run_with_undefined_label(mode)
-      error = assert_raise(ArgumentError) { run.call }
       assert_equal("@UNDEFINED label not found", error.message)
       assert_equal([], d.error_events)
+      # The records before the error are already re-emitted: in batch mode both "y" records, which are emitted for
+      # their label first, and in record mode only the first one.
+      assert_equal(mode == "batch" ? 2 : 1, d.events.size)
     end
   end
 end

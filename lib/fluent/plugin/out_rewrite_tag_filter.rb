@@ -94,13 +94,19 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
   # A label that is not defined raises ArgumentError when its router is looked up. With <label @ERROR>, send only the
   # records for that label to @ERROR, so the other records are re-emitted and not sent to @ERROR twice. Without it,
-  # raise the error as before, so that the input sees it.
+  # raise the error as in earlier versions, so that the input sees it. Raise it also when this plugin is in
+  # <label @ERROR>, because the records sent to @ERROR would come back to this plugin until the stack runs out.
   def get_router_or_emit_errors(label)
     get_router(label)
   rescue ArgumentError => e
-    raise unless error_label_defined?
+    raise unless error_label_defined? && !in_error_label?
     yield e
     nil
+  end
+
+  # out_copy gives its own context router to the outputs in <store>, so this is also true for them.
+  def in_error_label?
+    context_router.equal?(Fluent::Engine.root_agent.find_label(Fluent::RootAgent::ERROR_LABEL).event_router)
   end
 
   def error_label_defined?
@@ -132,7 +138,11 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     if !new_event_streams.nil?
       new_event_streams.each do |rewrited_label, label_event_streams |
         labeled_router = get_router_or_emit_errors(rewrited_label) do |e|
-          label_event_streams.each_value { |new_es| new_es.each { |time, record| router.emit_error_event(tag, time, record, e) } }
+          # Send the records for the label as one stream, so that Fluentd logs one warning for them, not one for each
+          # record. This is the handler that the router calls for an error in emit_stream.
+          error_es = Fluent::MultiEventStream.new
+          label_event_streams.each_value { |new_es| new_es.each { |time, record| error_es.add(time, record) } }
+          Fluent::Engine.root_agent.handle_emits_error(tag, error_es, e)
         end
         next unless labeled_router
         label_event_streams.each do |rewrited_tag, new_es|
