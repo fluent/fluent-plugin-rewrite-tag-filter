@@ -845,6 +845,21 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal([["error", "input", { "message" => "x" }]] * 2, events.select { |e| e[0] == "error" })
     end
 
+    # Fluentd makes the error with its backtrace for each lookup, so the error is kept for the label in one process call.
+    test "in record mode, a label that is not defined is looked up once for each stream" do
+      RewriteTagFilterTestCollectOutput.events.clear
+      configure_fluentd(undefined_label_conf("record"))
+      plugin = Fluent::Engine.root_agent.outputs.find { |o| o.is_a?(Fluent::Plugin::RewriteTagFilterOutput) }
+      lookups = Hash.new(0)
+      plugin.define_singleton_method(:get_router) do |label|
+        lookups[label] += 1
+        super(label)
+      end
+      events = emit_records(Fluent::Engine.root_agent.event_router)
+      assert_equal({ nil => 2, "@UNDEFINED" => 1 }, lookups)
+      assert_equal([["error", "input", { "message" => "x" }]] * 2, events.select { |e| e[0] == "error" })
+    end
+
     test "in batch mode, the records for it are sent to @ERROR as one stream, with one warning" do
       run_fluentd(undefined_label_conf("batch"))
       warnings = $log.out.logs.grep(/@UNDEFINED label not found/)
