@@ -68,11 +68,15 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
         "same key and pattern"      => [["message", "/x/"], ["message", "/x/"]],
         "pattern with and w/o slashes" => [["message", "x"], ["message", "/x/"]],
         "same, both inverted"       => [["message", "/x/", true], ["message", "/x/", true]],
+        "inline option group"       => [["message", "/x/i"], ["message", "/(?i:x)/"]],
+        "non-capturing group"       => [["message", "/x/"], ["message", "/(?:x)/"]],
+        "escaped slashes"           => [["message", "^/api/"], ["message", "/^\\/api\\//"]],
       )
       test "are rejected" do |rules|
-        assert_raise(Fluent::ConfigError) do
+        e = assert_raise(Fluent::ConfigError) do
           create_driver(rules_conf(*rules))
         end
+        assert_match(/duplicated rewriterules/, e.message)
       end
 
       data(
