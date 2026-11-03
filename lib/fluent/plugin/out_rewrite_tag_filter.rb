@@ -106,16 +106,25 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
   # out_copy gives its own context router to the outputs in <store>, so this is also true for them.
   def in_error_label?
-    context_router.equal?(Fluent::Engine.root_agent.find_label(Fluent::RootAgent::ERROR_LABEL).event_router)
+    context_router.equal?(own_root_agent.find_label(Fluent::RootAgent::ERROR_LABEL).event_router)
   end
 
   def error_label_defined?
-    root_agent = Fluent::Engine.root_agent
+    root_agent = own_root_agent
     return false if root_agent.nil?
     root_agent.find_label(Fluent::RootAgent::ERROR_LABEL)
     true
   rescue ArgumentError
     false
+  end
+
+  # The root agent of the configuration that this plugin belongs to. Fluent::Engine.root_agent is the newest one: a
+  # reload replaces it before the old plugins stop. The handler of the router is the root agent, or the label that
+  # this plugin is in, and the label knows its root agent. The router of the test driver has no handler.
+  def own_root_agent
+    handler = router.respond_to?(:emit_error_handler) ? router.emit_error_handler : nil
+    handler = handler.root_agent if handler.is_a?(Fluent::Label)
+    handler.is_a?(Fluent::RootAgent) ? handler : Fluent::Engine.root_agent
   end
 
   def process(tag, es)
@@ -142,7 +151,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
           # record. This is the handler that the router calls for an error in emit_stream.
           error_es = Fluent::MultiEventStream.new
           label_event_streams.each_value { |new_es| new_es.each { |time, record| error_es.add(time, record) } }
-          Fluent::Engine.root_agent.handle_emits_error(tag, error_es, e)
+          own_root_agent.handle_emits_error(tag, error_es, e)
         end
         next unless labeled_router
         label_event_streams.each do |rewrited_tag, new_es|

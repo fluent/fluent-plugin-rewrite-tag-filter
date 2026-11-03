@@ -877,6 +877,35 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal(RECORDS.map { |record| ["error", "input", record] }, events)
     end
 
+    # Engine#reload_config replaces Fluent::Engine.root_agent with a new one and configures it before the old plugins
+    # stop. Engine#init makes a new root agent in the same way. The old plugins check and send to @ERROR of the
+    # configuration that they belong to.
+    def emit_after_reload(old_conf, new_conf)
+      RewriteTagFilterTestCollectOutput.events.clear
+      Fluent::Engine.run_configure(Fluent::Config.parse(old_conf, "(test)", "(test_dir)", syntax: :v1))
+      old_root_agent = Fluent::Engine.root_agent
+      Fluent::Engine.init(Fluent::SystemConfig.new)
+      Fluent::Engine.run_configure(Fluent::Config.parse(new_conf, "(test)", "(test_dir)", syntax: :v1))
+      es = Fluent::MultiEventStream.new
+      RECORDS.each { |record| es.add(event_time, record) }
+      old_root_agent.event_router.emit_stream("input", es)
+    end
+
+    data(EMIT_MODES)
+    test "during a reload, the records go to @ERROR of the configuration of this plugin" do |mode|
+      emit_after_reload(undefined_label_conf(mode), undefined_label_conf(mode).sub("name error", "name new_error"))
+      events = RewriteTagFilterTestCollectOutput.events
+      assert_equal([["error", "input", { "message" => "x" }]] * 2, events.select { |e| e[0].end_with?("error") })
+    end
+
+    data(EMIT_MODES)
+    test "during a reload that adds <label @ERROR>, the error goes back to the input as before" do |mode|
+      without_error_label = undefined_label_conf(mode).sub(%r{<label @ERROR>.*</label>}m, "")
+      error = assert_raise(ArgumentError) { emit_after_reload(without_error_label, undefined_label_conf(mode)) }
+      assert_equal("@UNDEFINED label not found", error.message)
+      assert_equal([], RewriteTagFilterTestCollectOutput.events.select { |e| e[0] == "error" })
+    end
+
     data(EMIT_MODES)
     test "without <label @ERROR>, the error goes back to the input as before" do |mode|
       rules = rule_conf(pattern: "/^x$/", tag: "new.${tag}", label: "@UNDEFINED", head: "emit_mode #{mode}") + rule_conf(pattern: "/^y$/", tag: "ok.${tag}")
