@@ -46,7 +46,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
       invert = rule.invert ? MATCH_OPERATOR_EXCLUDE : ""
       @rewriterules.push([record_accessor_create(rule.key), rule.pattern, invert, rule.tag, rule.label])
-      rewriterule_names.push(rule.key + invert + rule.pattern.to_s)
+      rewriterule_names.push([rule.key, invert, rule.pattern])
       log.info "adding rewrite_tag_filter rule: #{rule.key} #{@rewriterules.last}"
     end
 
