@@ -360,8 +360,6 @@ It's a sample to rewrite a tag with placeholder.
 In addition to changing tags, you can also change event's route by setting
  the label for the re-emitted event.
 
-A record for a label that is not defined with `<label>` is sent to `@ERROR` when `<label @ERROR>` is defined, and the other records are re-emitted. Without `<label @ERROR>`, the error goes back to the input, as before.
-
 For example, given this configuration:
 
 ```
@@ -385,6 +383,8 @@ message: `{"domain": "www.example.com"}` will get its tag changed to
 `web.apache.access`, while message 
 `{"domain": "api.example.com"}` will get its tag changed to `other.api` and
  be sent to label `other`
+
+A record for a label that is not defined with `<label>` is sent to `@ERROR` when `<label @ERROR>` is defined, and the other records are re-emitted. In `batch` mode, the records for the label are sent as one stream, so Fluentd logs one warning for them. Without `<label @ERROR>`, the error goes back to the input, as in earlier versions. Some of the other records in the same stream may already be re-emitted before the error, so they are re-emitted again if the input retries. When this plugin is in `<label @ERROR>`, the error is raised too, because the records sent to `@ERROR` would come back to this plugin.
 
 ## Example
 
