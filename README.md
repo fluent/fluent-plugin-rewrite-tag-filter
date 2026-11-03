@@ -218,6 +218,8 @@ The depth is counted:
 * for each `<match>` section (or `<store>` of `out_copy`), so a loop through two sections passes the events up to twice `max_reemit_depth`, and through three up to three times.
 * only while the emits are nested in one fiber. A loop through a buffered output, or through `out_forward` and `in_forward`, starts again at 0 on each pass, and is not stopped.
 
+An error that this plugin raises, such as for a label that is not defined, is not counted. Fluentd sends the events to `@ERROR`, as for other outputs that raise an error, so if `<label @ERROR>` sends them back to this plugin, for example with `relabel`, they loop until `SystemStackError`.
+
 ### Nested attributes
 
 Dot notation:
