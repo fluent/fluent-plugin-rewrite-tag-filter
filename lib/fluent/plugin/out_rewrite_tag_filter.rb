@@ -6,7 +6,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
   helpers :event_emitter, :record_accessor
 
-  desc 'Capitalize letter for every matched regex backreference.'
+  desc "Convert the first character of every matched regex backreference to upper case and the rest to lower case, as Ruby's String#capitalize does."
   config_param :capitalize_regex_backreference, :bool, :default => false
   desc 'Remove tag prefix for tag placeholder.'
   config_param :remove_tag_prefix, :string, :default => nil
@@ -18,7 +18,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   config_param :emit_mode, :enum, list: [:record, :batch], default: :batch
 
   config_section :rule, param_name: :rules, multi: true do
-    desc "The field name to which the regular expression is applied"
+    desc "The field name to which the regular expression is applied. A value that is not a String is converted with Ruby's to_s before matching."
     config_param :key, :string
     desc "The regular expression"
     config_param :pattern, :regexp
