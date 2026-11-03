@@ -57,7 +57,9 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     rewriterule_names = []
     @rule_keys = {}
     @unreadable_key_warned = {}
-    @hostname = `#{@hostname_command}`.chomp
+    # The command does not run when no rule uses the hostname, so a missing command does not stop the startup.
+    uses_hostname = @rules.any? { |rule| rule.tag.include?('${hostname}') || rule.tag.include?('__HOSTNAME__') }
+    @hostname = uses_hostname ? `#{@hostname_command}`.chomp : ''
 
     @rules.each do |rule|
       unless rule.tag.match(/\$\{tag_parts\[\d\.\.\.?\d\]\}/).nil? or rule.tag.match(/__TAG_PARTS\[\d\.\.\.?\d\]__/).nil?
@@ -67,7 +69,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       invert = rule.invert ? MATCH_OPERATOR_EXCLUDE : ""
       @rewriterules.push([record_accessor_create(rule.key), rule.pattern, invert, rule.tag, rule.label])
       @rule_keys[@rewriterules.last.first] = rule.key
-      rewriterule_names.push(rule.key + invert + rule.pattern.to_s)
+      rewriterule_names.push([rule.key, invert, rule.pattern.to_s])
       log.info "adding rewrite_tag_filter rule: #{rule.key} #{@rewriterules.last}"
     end
 
@@ -182,7 +184,6 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
         log.trace("rewrite_tag_filter: tag has not been rewritten", record)
         next
       end
-      rewrited_tag = tag if rewrited_tag.nil?
       if new_event_streams.nil?
         labeled_router = get_router_or_emit_errors(rewrited_label) { |e| router.emit_error_event(tag, time, record, e) }
         labeled_router.emit(rewrited_tag, time, record) if labeled_router
@@ -271,6 +272,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   def get_backreference_table(elements)
     hash_table = Hash.new
     elements.each.with_index(1) do |value, index|
+      # An optional group that did not participate in the match is nil.
+      value = value.to_s
       hash_table["$#{index}"] = @capitalize_regex_backreference ? value.capitalize : value
     end
     return hash_table
