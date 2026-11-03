@@ -793,52 +793,56 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
 
     RECORDS = [{ "message" => "y" }, { "message" => "x" }, { "message" => "x" }, { "message" => "y" }].freeze
 
-    # Fluentd with its own router, which raises the error for a label that is not defined.
-    def run_fluentd(conf, label: nil)
-      RewriteTagFilterTestCollectOutput.events.clear
+    def configure_fluentd(conf)
       Fluent::Engine.run_configure(Fluent::Config.parse(conf, "(test)", "(test_dir)", syntax: :v1))
-      es = Fluent::MultiEventStream.new
-      RECORDS.each { |record| es.add(event_time, record) }
-      router = label ? Fluent::Engine.root_agent.find_label(label).event_router : Fluent::Engine.root_agent.event_router
-      router.emit_stream("input", es)
+    end
+
+    def emit_records(router)
+      router.emit_array("input", RECORDS.map { |record| [event_time, record] })
       RewriteTagFilterTestCollectOutput.events
     end
 
-    def undefined_label_conf(mode)
-      %[
+    # Fluentd with its own router, which raises the error for a label that is not defined.
+    def run_fluentd(conf, label: nil)
+      RewriteTagFilterTestCollectOutput.events.clear
+      configure_fluentd(conf)
+      root_agent = Fluent::Engine.root_agent
+      emit_records(label ? root_agent.find_label(label).event_router : root_agent.event_router)
+    end
+
+    def undefined_rule_conf(mode)
+      rule_conf(pattern: "/^x$/", tag: "new.${tag}", label: "@UNDEFINED", head: "emit_mode #{mode}")
+    end
+
+    def undefined_label_conf(mode, error_label: true)
+      conf = %[
         <match input>
           @type rewrite_tag_filter
-          emit_mode #{mode}
-          <rule>
-            key message
-            pattern /^x$/
-            tag new.${tag}
-            label @UNDEFINED
-          </rule>
-          <rule>
-            key message
-            pattern /^y$/
-            tag ok.${tag}
-          </rule>
+          #{undefined_rule_conf(mode)}
+          #{rule_conf(pattern: "/^y$/", tag: "ok.${tag}")}
         </match>
         <match ok.**>
           @type rewrite_tag_filter_test_collect
           name ok
         </match>
-        <label @ERROR>
-          <match **>
-            @type rewrite_tag_filter_test_collect
-            name error
-          </match>
-        </label>
       ]
+      error_label ? conf + ERROR_COLLECT_CONF : conf
     end
+
+    ERROR_COLLECT_CONF = %[
+      <label @ERROR>
+        <match **>
+          @type rewrite_tag_filter_test_collect
+          name error
+        </match>
+      </label>
+    ].freeze
 
     data(EMIT_MODES)
     test "with <label @ERROR>, only the records for it go to @ERROR" do |mode|
       events = run_fluentd(undefined_label_conf(mode))
-      assert_equal([["ok", "ok.input", { "message" => "y" }], ["ok", "ok.input", { "message" => "y" }]], events.select { |e| e[0] == "ok" })
-      assert_equal([["error", "input", { "message" => "x" }], ["error", "input", { "message" => "x" }]], events.select { |e| e[0] == "error" })
+      assert_equal([["ok", "ok.input", { "message" => "y" }]] * 2, events.select { |e| e[0] == "ok" })
+      assert_equal([["error", "input", { "message" => "x" }]] * 2, events.select { |e| e[0] == "error" })
     end
 
     test "in batch mode, the records for it are sent to @ERROR as one stream, with one warning" do
@@ -858,13 +862,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
             @type copy
             <store ignore_error>
               @type rewrite_tag_filter
-              emit_mode #{mode}
-              <rule>
-                key message
-                pattern /^x$/
-                tag new.${tag}
-                label @UNDEFINED
-              </rule>
+              #{undefined_rule_conf(mode)}
             </store>
             <store>
               @type rewrite_tag_filter_test_collect
@@ -894,13 +892,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
             @type copy
             <store ignore_error>
               @type rewrite_tag_filter
-              emit_mode #{mode}
-              <rule>
-                key message
-                pattern /^x$/
-                tag new.${tag}
-                label @UNDEFINED
-              </rule>
+              #{undefined_rule_conf(mode)}
             </store>
             <store>
               @type rewrite_tag_filter_test_collect
@@ -919,46 +911,37 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     # configuration that they belong to.
     def emit_after_reload(old_conf, new_conf)
       RewriteTagFilterTestCollectOutput.events.clear
-      Fluent::Engine.run_configure(Fluent::Config.parse(old_conf, "(test)", "(test_dir)", syntax: :v1))
+      configure_fluentd(old_conf)
       old_root_agent = Fluent::Engine.root_agent
       Fluent::Engine.init(Fluent::SystemConfig.new)
-      Fluent::Engine.run_configure(Fluent::Config.parse(new_conf, "(test)", "(test_dir)", syntax: :v1))
-      es = Fluent::MultiEventStream.new
-      RECORDS.each { |record| es.add(event_time, record) }
-      old_root_agent.event_router.emit_stream("input", es)
+      configure_fluentd(new_conf)
+      emit_records(old_root_agent.event_router)
     end
 
     data(EMIT_MODES)
     test "during a reload, the records go to @ERROR of the configuration of this plugin" do |mode|
-      emit_after_reload(undefined_label_conf(mode), undefined_label_conf(mode).sub("name error", "name new_error"))
-      events = RewriteTagFilterTestCollectOutput.events
+      new_conf = undefined_label_conf(mode).sub("name error", "name new_error")
+      events = emit_after_reload(undefined_label_conf(mode), new_conf)
       assert_equal([["error", "input", { "message" => "x" }]] * 2, events.select { |e| e[0].end_with?("error") })
     end
 
     data(EMIT_MODES)
     test "during a reload that adds <label @ERROR>, the error goes back to the input as before" do |mode|
-      without_error_label = undefined_label_conf(mode).sub(%r{<label @ERROR>.*</label>}m, "")
-      error = assert_raise(ArgumentError) { emit_after_reload(without_error_label, undefined_label_conf(mode)) }
+      error = assert_raise(ArgumentError) do
+        emit_after_reload(undefined_label_conf(mode, error_label: false), undefined_label_conf(mode))
+      end
       assert_equal("@UNDEFINED label not found", error.message)
       assert_equal([], RewriteTagFilterTestCollectOutput.events.select { |e| e[0] == "error" })
     end
 
     data(EMIT_MODES)
     test "without <label @ERROR>, the error goes back to the input as before" do |mode|
-      rules = rule_conf(pattern: "/^x$/", tag: "new.${tag}", label: "@UNDEFINED", head: "emit_mode #{mode}") + rule_conf(pattern: "/^y$/", tag: "ok.${tag}")
-      d = create_driver(rules)
-      # The test driver routes any label. Look the label up in Fluentd, which raises the error for a label that is not defined.
-      d.instance.define_singleton_method(:get_router) do |label|
-        label == "@UNDEFINED" ? Fluent::Engine.root_agent.find_label(label).event_router : super(label)
-      end
-      error = assert_raise(ArgumentError) do
-        d.run(default_tag: "input") { d.feed(RECORDS.map { |record| [event_time, record] }) }
-      end
+      error = assert_raise(ArgumentError) { run_fluentd(undefined_label_conf(mode, error_label: false)) }
       assert_equal("@UNDEFINED label not found", error.message)
-      assert_equal([], d.error_events)
       # The records before the error are already re-emitted: in batch mode both "y" records, which are emitted for
       # their label first, and in record mode only the first one.
-      assert_equal(mode == "batch" ? 2 : 1, d.events.size)
+      expected = [["ok", "ok.input", { "message" => "y" }]] * (mode == "batch" ? 2 : 1)
+      assert_equal(expected, RewriteTagFilterTestCollectOutput.events)
     end
   end
 end
