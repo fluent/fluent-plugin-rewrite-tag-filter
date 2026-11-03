@@ -598,7 +598,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
   end
 
   sub_test_case "a nested key that the rules cannot read" do
-    data(
+    UNREADABLE = {
       "string parent"                   => ["$.log.level",       { "log" => "plain" }],
       "string parent, bracket notation" => ["$['log']['level']", { "log" => "plain" }],
       "integer parent"                  => ["$.log.level",       { "log" => 1 }],
@@ -606,13 +606,48 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       "array parent"                    => ["$.log.level",       { "log" => ["x"] }],
       "string grandparent"              => ["$.log.level.name",  { "log" => { "level" => "x" } }],
       "array index on string"           => ["$.log[0]",          { "log" => "plain" }],
-    )
+    }.freeze
+
+    data(UNREADABLE)
     test "is treated as a missing key" do |(key, record)|
       rules = rule_conf(key: key, pattern: "/^(.+)$/", tag: "level.$1") + rule_conf(pattern: "/(?!)/", tag: "other", invert: true)
       d = create_driver(rules)
-      d.run(default_tag: "input") { [record, record].each { |r| d.feed(r) } }
-      assert_equal(["other", "other"], d.events.map(&:first))
-      assert_equal([], d.error_events)
+      d.run(default_tag: "input") { d.feed(record) }
+      assert_equal(["other"], d.events.map(&:first))
+    end
+
+    data(UNREADABLE)
+    test "is treated as a missing key by an invert rule on it" do |(key, record)|
+      d = create_driver(rule_conf(key: key, pattern: "/^x$/", tag: "not_x", invert: true))
+      d.run(default_tag: "input") { d.feed(record) }
+      assert_equal(["not_x"], d.events.map(&:first))
+    end
+
+    data(EMIT_MODES)
+    test "does not stop the readable records in the same stream" do |mode|
+      rules = rule_conf(key: "$.log.level", pattern: "/^(.+)$/", tag: "level.$1", head: "emit_mode #{mode}")
+      d = create_driver(rules)
+      d.run(default_tag: "input") do
+        d.feed([[event_time, { "log" => "plain" }], [event_time, { "log" => { "level" => "info" } }]])
+      end
+      assert_equal([["level.info", { "log" => { "level" => "info" } }]], d.events.map { |t, _, r| [t, r] })
+    end
+
+    test "is warned once for each rule" do
+      rules = rule_conf(key: "$.log.level", pattern: "/^x$/", tag: "x") + rule_conf(key: "$.log.name", pattern: "/^y$/", tag: "y")
+      d = create_driver(rules)
+      d.run(default_tag: "input") { 3.times { d.feed({ "log" => "plain" }) } }
+      warnings = d.logs.grep(/a parent in the nested key cannot be read/)
+      assert_equal(2, warnings.size, warnings.inspect)
+      assert_match(/key="\$\.log\.level"/, warnings[0])
+      assert_match(/key="\$\.log\.name"/, warnings[1])
+    end
+
+    test "a record that is not a Hash still raises the error as before" do
+      d = create_driver(rule_conf(key: "message", pattern: "/(?!)/", tag: "other", invert: true))
+      es = Fluent::MultiEventStream.new
+      es.add(event_time, ["a", "b"])
+      assert_raise(TypeError) { d.run(default_tag: "input") { d.feed("input", es) } }
     end
   end
 
