@@ -114,46 +114,30 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
   # A label that is not defined raises ArgumentError when its router is looked up. With <label @ERROR>, send only the
   # records for that label to @ERROR, so the other records are re-emitted and not sent to @ERROR twice. Without it,
-  # raise the error as in earlier versions, so that the input sees it. Raise it also when this plugin is in
-  # <label @ERROR>, because the records sent to @ERROR would come back to this plugin until the stack runs out.
+  # raise the error as in earlier versions, so that the input sees it.
   #
-  # The records sent to @ERROR can also come back through another label, for example with relabel in <label @ERROR>.
-  # When they come back to this plugin and hit a label that is not defined again, throw back to where they were sent,
-  # and raise the error there, as if they had not been sent to @ERROR. Raising it at the inner level instead would let
-  # an outer out_copy send the records to its next <store> a second time.
+  # The records sent to @ERROR must not come back to this plugin and loop. When this plugin is in <label @ERROR>, raise
+  # before sending them. out_copy gives its own context router to the outputs in <store>, so this is also true for them.
+  # When they come back through another label, for example with relabel in <label @ERROR>, throw back to where they were
+  # sent and raise there, as if they had not been sent. Raising at the inner level would let an outer out_copy send them
+  # to its next <store> a second time.
   def get_router_or_emit_errors(label)
     get_router(label)
   rescue ArgumentError => e
-    raise unless error_label_defined? && !in_error_label?
+    error_router = own_root_agent&.error_collector
+    raise if error_router.nil? || context_router.equal?(error_router)
     sending = (Thread.current[SENDING_TO_ERROR_KEY] ||= {})
     throw sending[object_id] if sending.key?(object_id)
-    tag = Object.new
-    sent = false
-    sending[object_id] = tag
     begin
-      catch(tag) do
+      sent = catch do |sent_tag|
+        sending[object_id] = sent_tag
         yield e
-        sent = true
+        true
       end
     ensure
       sending.delete(object_id)
     end
     raise e unless sent
-    nil
-  end
-
-  # out_copy gives its own context router to the outputs in <store>, so this is also true for them.
-  def in_error_label?
-    context_router.equal?(own_root_agent.find_label(Fluent::RootAgent::ERROR_LABEL).event_router)
-  end
-
-  def error_label_defined?
-    root_agent = own_root_agent
-    return false if root_agent.nil?
-    root_agent.find_label(Fluent::RootAgent::ERROR_LABEL)
-    true
-  rescue ArgumentError
-    false
   end
 
   # The root agent of the configuration that this plugin belongs to. Fluent::Engine.root_agent is the newest one: a
@@ -176,7 +160,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
         rewrite_and_emit(tag, es)
       elsif depth == @max_reemit_depth
         error = ReemitLoopError.new("events came back to this plugin #{depth} times in a row. Check the tag and the label of the rules, or max_reemit_depth")
-        if error_label_defined?
+        if own_root_agent&.error_collector
           # Send them to @ERROR here instead of raising the error, so the events that come back from @ERROR are still
           # counted at this depth.
           es.each { |time, record| router.emit_error_event(tag, time, record, error) }
