@@ -426,6 +426,24 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal invalid_ascii, events[0][2]['client_name']
     end
 
+    test "capitalize_regex_backreference with an unmatched optional group" do
+      conf = %[
+        capitalize_regex_backreference yes
+        <rule>
+          key domain
+          pattern ^(www\\.)?([a-z]+)\\.com$
+          tag site.$1$2
+        </rule>
+      ]
+      d = create_driver(conf)
+      d.run(default_tag: "input") do
+        d.feed({ "domain" => "www.example.com" })
+        d.feed({ "domain" => "example.com" })
+      end
+      events = d.events
+      assert_equal ["site.Www.Example", "site.Example"], events.map { |e| e[0] }
+    end
+
     test "nested key support with dot notation" do
       conf = %[
         <rule>
