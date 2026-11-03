@@ -87,45 +87,26 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     return label_router
   end
 
-  # An undefined label raises ArgumentError when its router is looked up. Send the records for it to @ERROR one by one,
-  # so the records for the other labels are re-emitted and not sent to @ERROR twice.
-  def get_router_or_emit_errors(label)
-    get_router(label)
-  rescue ArgumentError => e
-    yield e
-    nil
-  end
-
   def process(tag, es)
     placeholder = get_placeholder(tag)
     new_event_streams =  Hash.new {|hh, kk| hh[kk] = Hash.new {|h, k| h[k] = Fluent::MultiEventStream.new }}if @batch_mode
 
     es.each do |time, record|
-      begin
-        rewrited_tag, rewrited_label  = rewrite_tag(tag, record, placeholder)
-      rescue => e
-        # Send only this record to @ERROR, so the other records in the stream are still re-emitted.
-        router.emit_error_event(tag, time, record, e)
-        next
-      end
+      rewrited_tag, rewrited_label  = rewrite_tag(tag, record, placeholder)
       if (rewrited_tag.nil? || tag == rewrited_tag) && rewrited_label.nil?
         log.trace("rewrite_tag_filter: tag has not been rewritten", record)
         next
       end
       rewrited_tag = tag if rewrited_tag.nil?
       if new_event_streams.nil?
-        labeled_router = get_router_or_emit_errors(rewrited_label) { |e| router.emit_error_event(tag, time, record, e) }
-        labeled_router.emit(rewrited_tag, time, record) if labeled_router
+        get_router(rewrited_label).emit(rewrited_tag, time, record)
       else
         new_event_streams[rewrited_label][rewrited_tag].add(time, record)
       end
     end
     if !new_event_streams.nil?
       new_event_streams.each do |rewrited_label, label_event_streams |
-        labeled_router = get_router_or_emit_errors(rewrited_label) do |e|
-          label_event_streams.each_value { |new_es| new_es.each { |time, record| router.emit_error_event(tag, time, record, e) } }
-        end
-        next unless labeled_router
+        labeled_router = get_router(rewrited_label)
         label_event_streams.each do |rewrited_tag, new_es|
             labeled_router.emit_stream(rewrited_tag, new_es)
         end
@@ -157,7 +138,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     rewritetag.gsub(/(\$\d+)|(\${[a-z_]+(?:\[[0-9]+\])?}|__TAG_PARTS\[[0-9]+\]__|__[A-Z_]+?__)/) do
       if $1
         # An invert rule has no captures, so "$1" stays as it is written.
-        backreference_table ? binary_as_utf8(backreference_table[$1]) : $1
+        backreference_table ? backreference_table[$1] : $1
       else
         log.warn "rewrite_tag_filter: unknown placeholder found. :placeholder=>#{$2} :tag=>#{tag} :rewritetag=>#{rewritetag}" unless placeholder.include?($2)
         placeholder[$2]
@@ -168,31 +149,12 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   def read_value(record_accessor, record)
     record_accessor.call(record).to_s
   rescue TypeError
-    # A nested key whose parent is not a Hash or an Array, such as $.log.level for {"log": "text"},
-    # is treated as a missing key.
+    # A nested key whose parent cannot be read with the next key, such as $.log.level for {"log": "text"} or
+    # {"log": ["x"]}, is treated as a missing key.
     ''
   end
 
-  # in_tail without `encoding` gives ASCII-8BIT strings.
-  def binary_with_non_ascii?(value)
-    value.is_a?(String) && value.encoding == Encoding::ASCII_8BIT && !value.ascii_only?
-  end
-
-  # An ASCII-8BIT capture cannot be put into a tag with non-ASCII characters. Read it as UTF-8 when it is valid UTF-8,
-  # and otherwise keep it as it is.
-  def binary_as_utf8(value)
-    return value unless binary_with_non_ascii?(value)
-    utf8 = value.dup.force_encoding(Encoding::UTF_8)
-    utf8.valid_encoding? ? utf8 : value
-  end
-
   def regexp_last_match(regexp, rewritevalue)
-    # A pattern with non-ASCII characters cannot be matched against an ASCII-8BIT string. Read the string as UTF-8,
-    # and the bytes that are not valid UTF-8 are replaced below, like in a string with an invalid encoding.
-    # An ASCII-only pattern still matches the bytes as before.
-    if regexp.fixed_encoding? && binary_with_non_ascii?(rewritevalue)
-      rewritevalue = rewritevalue.dup.force_encoding(Encoding::UTF_8)
-    end
     if rewritevalue.valid_encoding?
       regexp.match(rewritevalue)
     else
