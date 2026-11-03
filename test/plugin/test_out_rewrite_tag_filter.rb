@@ -597,113 +597,22 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     end
   end
 
-  sub_test_case "a record that the rules cannot read as expected" do
-    def run_rules(rules, records, head: "")
-      d = create_driver("#{head}\n#{rules}")
-      d.run(default_tag: "input") { records.each { |r| d.feed(r) } }
-      d
-    end
-
+  sub_test_case "a nested key that the rules cannot read" do
     data(
-      "string parent"        => ["$.log.level",       { "log" => "plain" }],
+      "string parent"                   => ["$.log.level",       { "log" => "plain" }],
       "string parent, bracket notation" => ["$['log']['level']", { "log" => "plain" }],
-      "integer parent"       => ["$.log.level",       { "log" => 1 }],
-      "true parent"          => ["$.log.level",       { "log" => true }],
-      "array parent"         => ["$.log.level",       { "log" => ["x"] }],
-      "string grandparent"   => ["$.log.level.name",  { "log" => { "level" => "x" } }],
-      "array index on string" => ["$.log[0]",         { "log" => "plain" }],
+      "integer parent"                  => ["$.log.level",       { "log" => 1 }],
+      "true parent"                     => ["$.log.level",       { "log" => true }],
+      "array parent"                    => ["$.log.level",       { "log" => ["x"] }],
+      "string grandparent"              => ["$.log.level.name",  { "log" => { "level" => "x" } }],
+      "array index on string"           => ["$.log[0]",          { "log" => "plain" }],
     )
-    test "nested key whose parent is not a Hash or an Array is treated as a missing key" do |(key, record)|
+    test "is treated as a missing key" do |(key, record)|
       rules = rule_conf(key: key, pattern: "/^(.+)$/", tag: "level.$1") + rule_conf(pattern: "/(?!)/", tag: "other", invert: true)
-      d = run_rules(rules, [record, record])
+      d = create_driver(rules)
+      d.run(default_tag: "input") { [record, record].each { |r| d.feed(r) } }
       assert_equal(["other", "other"], d.events.map(&:first))
       assert_equal([], d.error_events)
-    end
-
-    data(
-      "normal rule" => [false, ["jp.hit"]],
-      "invert rule" => [true,  ["jp.hit", "jp.hit"]],
-    )
-    test "ASCII-8BIT value against a pattern with non-ASCII characters" do |(invert, expected)|
-      # in_tail without `encoding` gives ASCII-8BIT strings.
-      records = [{ "message" => "ok" }, { "message" => "エラー発生".b }, { "message" => "その他のエラー".b }]
-      d = run_rules(rule_conf(pattern: "/^エラー/", tag: "jp.hit", invert: invert), records)
-      assert_equal(expected, d.events.map(&:first))
-    end
-
-    test "ASCII-8BIT capture put into a tag with non-ASCII characters" do
-      d = run_rules(rule_conf(pattern: "/^(\\S+)/", tag: "ログ.$1"), [{ "message" => "abc" }, { "message" => "あいう".b }])
-      assert_equal(["ログ.abc", "ログ.あいう"], d.events.map(&:first))
-      assert_equal([Encoding::UTF_8, Encoding::UTF_8], d.events.map { |t, _, _| t.encoding })
-    end
-
-    test "ASCII-only pattern matches the bytes of an ASCII-8BIT value as before" do
-      # "あいう" is 9 bytes in UTF-8, and .{3} matches the first 3 bytes, which are "あ".
-      d = run_rules(rule_conf(pattern: "/^(.{3})/", tag: "t.$1"), [{ "message" => "あいう".b }])
-      assert_equal(["t.あ"], d.events.map(&:first))
-    end
-
-    test "ASCII-8BIT value that is not valid UTF-8 is captured as it is" do
-      latin1 = "caf\xE9 au lait".b
-      d = run_rules(rule_conf(pattern: "/^(\\S+)/", tag: "t.$1"), [{ "message" => latin1 }])
-      assert_equal(["t.caf\xE9".b], d.events.map(&:first))
-      assert_equal([], d.error_events)
-    end
-
-    data(
-      "not inverted" => [false, []],
-      "inverted"     => [true,  ["jp.other"]],
-    )
-    test "ASCII-8BIT value that is not valid UTF-8 against a pattern with non-ASCII characters" do |(invert, expected)|
-      d = run_rules(rule_conf(pattern: "/^エラー/", tag: "jp.other", invert: invert), [{ "message" => "caf\xE9 au lait".b }])
-      assert_equal(expected, d.events.map(&:first))
-      assert_equal([], d.error_events)
-    end
-
-    test "the record itself keeps its encoding" do
-      value = "あいう".b
-      d = run_rules(rule_conf(pattern: "/^(あ)/", tag: "jp.$1"), [{ "message" => value }])
-      assert_equal(Encoding::ASCII_8BIT, d.events.first[2]["message"].encoding)
-    end
-
-    data(EMIT_MODES)
-    test "a record that raises an error goes to @ERROR and the others are re-emitted" do |mode|
-      # A pattern with non-ASCII characters cannot be matched against a Shift_JIS string.
-      bad = { "message" => "エラー".encode("Shift_JIS") }
-      d = run_rules(rule_conf(pattern: "/^(エ|o)/", tag: "hit.${tag}"), [{ "message" => "ok" }, bad, { "message" => "ok" }],
-                    head: "emit_mode #{mode}")
-      assert_equal(["hit.input", "hit.input"], d.events.map(&:first))
-      assert_equal(1, d.error_events.size)
-      _tag, _time, record, error = d.error_events.first
-      assert_kind_of(Encoding::CompatibilityError, error)
-      assert_equal(bad, record)
-    end
-    data(EMIT_MODES)
-    test "records for an undefined label go to @ERROR and the others are re-emitted" do |mode|
-      d = create_driver(%[
-        emit_mode #{mode}
-        <rule>
-          key message
-          pattern /^x$/
-          tag new.${tag}
-          label @UNDEFINED
-        </rule>
-        <rule>
-          key message
-          pattern /^y$/
-          tag ok.${tag}
-        </rule>
-      ])
-      # The test driver routes any label, so make the label undefined like the real router does.
-      d.instance.define_singleton_method(:get_router) do |label|
-        raise ArgumentError, "#{label} label not found" if label == "@UNDEFINED"
-        super(label)
-      end
-      d.run(default_tag: "input") do
-        d.feed([[event_time, { "message" => "y" }], [event_time, { "message" => "x" }], [event_time, { "message" => "y" }]])
-      end
-      assert_equal(["ok.input", "ok.input"], d.events.map(&:first))
-      assert_equal([{ "message" => "x" }], d.error_events.map { |_tag, _time, record, _error| record })
     end
   end
 

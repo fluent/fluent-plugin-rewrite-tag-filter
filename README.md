@@ -201,13 +201,9 @@ The `<label @UNMATCHED>` section must consume these records (for example, write 
 
 Alternatively, put `record_modifier` or `record_transformer` in front of this plugin so that the field always exists with a default value.
 
-### Records that cannot be processed
+### Events that keep coming back
 
-A record that raises an error in a rule is sent to the `@ERROR` label alone, and the other records in the event stream are re-emitted as usual. So is a record for a label that is not defined with `<label>`. Without `<label @ERROR>`, Fluentd logs the record in a warning and discards it.
-
-An event that comes back to this plugin 10 times in a row, for example with `tag new.${tag}` in `<match **>`, is also sent to `@ERROR`, with `ReemitLoopError`, instead of being re-emitted forever. If the error events come back to this plugin too, for example when it is in `<label @ERROR>`, they are dropped with an error log. `label ""` is the same as no label, so an event with the unchanged tag and `label ""` is skipped.
-
-A value in ASCII-8BIT, which `in_tail` gives when `encoding` is not set, is read as UTF-8 when the pattern has non-ASCII characters, so the pattern can match it. The bytes that are not valid UTF-8 are replaced with `?` for the pattern, as in a string with an invalid encoding. A pattern with only ASCII characters matches the bytes as before.
+An event that comes back to this plugin 10 times in a row, for example with `tag new.${tag}` in `<match **>`, is sent to `@ERROR`, with `ReemitLoopError`, instead of being re-emitted forever. If the error events come back to this plugin too, for example when it is in `<label @ERROR>`, they are dropped with an error log. `label ""` is the same as no label, so an event with the unchanged tag and `label ""` is skipped.
 
 ### Nested attributes
 
@@ -249,7 +245,7 @@ These example configurations can process nested attributes like following:
 
 When original tag is `kubernetes.var.log`, this will be converted to `default.kubernetes.var.log`.
 
-When a parent of the nested key is not a Hash or an Array, such as `{"kubernetes": "text"}` for the key above, the key is treated as missing (see "Handling records that do not have the key").
+When a parent of the nested key cannot be read with the next key, such as `{"kubernetes": "text"}` or `{"kubernetes": ["x"]}` for the key above, the key is treated as missing (see "Handling records that do not have the key").
 
 ### Tag placeholder
 
