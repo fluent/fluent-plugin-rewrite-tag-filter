@@ -877,6 +877,43 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal(RECORDS.map { |record| ["error", "input", record] }, events)
     end
 
+    # The records sent to @ERROR come back through relabel to @PROC, where this plugin is in <store ignore_error>. The
+    # error is raised where they were first sent, as if they had not been sent to @ERROR, so the outer out_copy goes on
+    # to the next <store>, which gets each record once.
+    data(EMIT_MODES)
+    test "records that come back through another label raise the error where they were sent" do |mode|
+      conf = %[
+        <label @ERROR>
+          <match **>
+            @type relabel
+            @label @PROC
+          </match>
+        </label>
+        <label @PROC>
+          <match **>
+            @type copy
+            <store ignore_error>
+              @type rewrite_tag_filter
+              emit_mode #{mode}
+              <rule>
+                key message
+                pattern /^x$/
+                tag new.${tag}
+                label @UNDEFINED
+              </rule>
+            </store>
+            <store>
+              @type rewrite_tag_filter_test_collect
+              name next
+            </store>
+          </match>
+        </label>
+      ]
+      events = run_fluentd(conf, label: "@PROC")
+      assert_equal(RECORDS.map { |record| ["next", "input", record] }, events)
+      assert_equal({}, Thread.current[Fluent::Plugin::RewriteTagFilterOutput::SENDING_TO_ERROR_KEY])
+    end
+
     # Engine#reload_config replaces Fluent::Engine.root_agent with a new one and configures it before the old plugins
     # stop. Engine#init makes a new root agent in the same way. The old plugins check and send to @ERROR of the
     # configuration that they belong to.

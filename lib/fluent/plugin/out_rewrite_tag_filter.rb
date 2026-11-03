@@ -31,6 +31,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   end
 
   MATCH_OPERATOR_EXCLUDE = '!'
+  # The instances that are sending records to @ERROR, for the current fiber. One key for all the instances.
+  SENDING_TO_ERROR_KEY = :rewrite_tag_filter_sending_to_error
 
   def configure(conf)
     super
@@ -96,11 +98,29 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   # records for that label to @ERROR, so the other records are re-emitted and not sent to @ERROR twice. Without it,
   # raise the error as in earlier versions, so that the input sees it. Raise it also when this plugin is in
   # <label @ERROR>, because the records sent to @ERROR would come back to this plugin until the stack runs out.
+  #
+  # The records sent to @ERROR can also come back through another label, for example with relabel in <label @ERROR>.
+  # When they come back to this plugin and hit a label that is not defined again, throw back to where they were sent,
+  # and raise the error there, as if they had not been sent to @ERROR. Raising it at the inner level instead would let
+  # an outer out_copy send the records to its next <store> a second time.
   def get_router_or_emit_errors(label)
     get_router(label)
   rescue ArgumentError => e
     raise unless error_label_defined? && !in_error_label?
-    yield e
+    sending = (Thread.current[SENDING_TO_ERROR_KEY] ||= {})
+    throw sending[object_id] if sending.key?(object_id)
+    tag = Object.new
+    sent = false
+    sending[object_id] = tag
+    begin
+      catch(tag) do
+        yield e
+        sent = true
+      end
+    ensure
+      sending.delete(object_id)
+    end
+    raise e unless sent
     nil
   end
 
