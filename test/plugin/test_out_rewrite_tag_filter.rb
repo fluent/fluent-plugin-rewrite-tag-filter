@@ -1,5 +1,6 @@
 require 'helper'
 require 'tmpdir'
+require 'shellwords'
 
 class RewriteTagFilterOutputTest < Test::Unit::TestCase
   def setup
@@ -16,9 +17,9 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     end
 
     # A command that works the same on sh and cmd.exe. A value that starts with a quote is read as a quoted string
-    # in the configuration, so the path of ruby is not quoted.
+    # in the configuration, so the path of ruby is escaped for sh instead of quoted.
     def ruby_command(code)
-      %Q[#{RbConfig.ruby} -e "#{code}"]
+      %Q[#{Shellwords.escape(RbConfig.ruby)} -e "#{code}"]
     end
 
     # Prints the bytes given in hex, so the command line has only ASCII characters.
