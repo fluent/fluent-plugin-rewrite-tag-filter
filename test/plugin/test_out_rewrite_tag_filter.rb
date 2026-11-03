@@ -700,10 +700,15 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
   end
 
   sub_test_case "max_reemit_depth" do
-    data("0" => "0", "negative" => "-1")
-    test "must be 1 or more" do |value|
+    data("0" => "0", "negative" => "-1", "over the limit" => "51")
+    test "must be between 1 and 50" do |value|
       error = assert_raise(Fluent::ConfigError) { create_driver("max_reemit_depth #{value}\n" + rule_conf(tag: "new")) }
-      assert_equal("max_reemit_depth must be 1 or more", error.message)
+      assert_equal("max_reemit_depth must be between 1 and 50", error.message)
+    end
+
+    data("1" => "1", "50" => "50")
+    test "accepts the limits" do |value|
+      assert_nothing_raised { create_driver("max_reemit_depth #{value}\n" + rule_conf(tag: "new")) }
     end
   end
 
@@ -766,6 +771,8 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
         run_fluentd(loop_conf(mode, label, error_label: false), "input")
       end
       assert_match(/events came back to this plugin 10 times in a row/, error.message)
+      # The error is raised once from the outermost pass, so Fluentd logs it once, not at each level of the nested emits.
+      assert_equal(1, $log.out.logs.grep(/emit transaction failed/).size, $log.out.logs.grep(/emit transaction failed/).inspect)
       assert_true(Thread.current[Fluent::Plugin::RewriteTagFilterOutput::REEMIT_DEPTH_KEY].empty?)
     end
 
@@ -791,6 +798,33 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
         </match>
       ] + ERROR_LABEL_CONF, "a.b.c.d.e.f.g.h.i.j.k.l.m")
       assert_equal(expected, events)
+    end
+
+    # Two instances in a loop, both inside out_copy, after 10 filters, with the largest max_reemit_depth. The events pass
+    # through 100 instances in a row. Run in a thread, which has a smaller stack than the main thread, as an input does.
+    test "the largest max_reemit_depth does not run out of the stack" do
+      filters = (1..10).map { "<filter **>\n@type record_transformer\n</filter>\n" }.join
+      rtf = ->(pattern, prefix) do
+        %[
+          <match #{pattern}>
+            @type copy
+            <store>
+              @type rewrite_tag_filter
+              max_reemit_depth 50
+              <rule>
+                key message
+                pattern /.+/
+                tag #{prefix}.${tag}
+              </rule>
+            </store>
+          </match>
+        ]
+      end
+      events = Thread.new { run_fluentd(filters + rtf.call("a.**", "b") + rtf.call("b.**", "a") + ERROR_LABEL_CONF, "a") }.value
+      assert_equal(1, events.size)
+      assert_equal("error", events.first[0])
+      # "a" and 100 parts added by the passes.
+      assert_equal(101, events.first[1].split(".").size)
     end
 
     data(EMIT_MODES)

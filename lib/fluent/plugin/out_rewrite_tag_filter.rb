@@ -16,7 +16,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   config_param :hostname_command, :string, :default => 'hostname'
   desc "The emit mode. If `batch`, this plugin will emit events per rewritten tag."
   config_param :emit_mode, :enum, list: [:record, :batch], default: :batch
-  desc "How many times in a row an event can come back to this plugin before it is stopped as a loop."
+  desc "How many times in a row an event can come back to this plugin. It is stopped as a loop when it comes back this many times. 1 to 50."
   config_param :max_reemit_depth, :integer, default: 10
 
   config_section :rule, param_name: :rules, multi: true do
@@ -35,15 +35,23 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   MATCH_OPERATOR_EXCLUDE = '!'
   # A re-emitted event that comes back to this plugin is processed again in the same thread, nested in the emit.
   # It is stopped at max_reemit_depth instead of growing until SystemStackError stops Fluentd.
+  # Each pass uses the stack of the thread. The stack of an input thread ran out after about 270 passes on Ruby 3.4,
+  # and after about 160 with out_copy in the path. 50 leaves room for a loop through two instances, which uses about
+  # twice the stack for each depth.
+  MAX_REEMIT_DEPTH_LIMIT = 50
   # One key for all the instances: a Symbol made per instance would stay in memory after a reload.
   REEMIT_DEPTH_KEY = :rewrite_tag_filter_reemit_depth
+  # The error of a loop without <label @ERROR>, kept until the depth goes back to 0.
+  REEMIT_ERROR_KEY = :rewrite_tag_filter_reemit_error
 
   class ReemitLoopError < StandardError; end
 
   def configure(conf)
     super
 
-    raise Fluent::ConfigError, "max_reemit_depth must be 1 or more" if @max_reemit_depth < 1
+    unless (1..MAX_REEMIT_DEPTH_LIMIT).cover?(@max_reemit_depth)
+      raise Fluent::ConfigError, "max_reemit_depth must be between 1 and #{MAX_REEMIT_DEPTH_LIMIT}"
+    end
 
     @rewriterules = []
     rewriterule_names = []
@@ -125,16 +133,21 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     depths = (Thread.current[REEMIT_DEPTH_KEY] ||= {})
     depth = depths[object_id] || 0
     depths[object_id] = depth + 1
+    loop_error = nil
     begin
       if depth < @max_reemit_depth
         rewrite_and_emit(tag, es)
       elsif depth == @max_reemit_depth
         error = ReemitLoopError.new("events came back to this plugin #{depth} times in a row. Check the tag and the label of the rules, or max_reemit_depth")
-        # Without <label @ERROR>, raise the error like other errors, so that the input sees it.
-        raise error unless error_label_defined?
-        # Send them to @ERROR here instead of raising the error, so the events that come back from @ERROR are still
-        # counted at this depth.
-        es.each { |time, record| router.emit_error_event(tag, time, record, error) }
+        if error_label_defined?
+          # Send them to @ERROR here instead of raising the error, so the events that come back from @ERROR are still
+          # counted at this depth.
+          es.each { |time, record| router.emit_error_event(tag, time, record, error) }
+        else
+          # Without <label @ERROR>, the error is raised like other errors, so that the input sees it. Raised here, it would
+          # be logged at each level of the nested emits, so it is kept and raised once, at depth 0.
+          (Thread.current[REEMIT_ERROR_KEY] ||= {})[object_id] ||= error
+        end
       else
         # The error events came back too, for example when this plugin is in <label @ERROR>. Sending them to @ERROR
         # again would loop forever, so drop them, and keep the records in the log.
@@ -145,10 +158,12 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     ensure
       if depth.zero?
         depths.delete(object_id)
+        loop_error = Thread.current[REEMIT_ERROR_KEY]&.delete(object_id)
       else
         depths[object_id] = depth
       end
     end
+    raise loop_error if loop_error
   end
 
   def rewrite_and_emit(tag, es)

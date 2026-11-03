@@ -48,7 +48,7 @@ For more details, see [Plugin Management](https://docs.fluentd.org/deployment/pl
   * Default value: `hostname`
 * **emit_mode** (enum) (required): Specify emit_mode to `batch` or `record`. `batch` will emit events per rewritten tag, and decrease IO. `record` will emit events per record.
   * Default value: `batch`
-* **max_reemit_depth** (integer) (optional): How many times in a row an event can come back to this plugin before it is stopped as a loop. (see the section of "Events that keep coming back")
+* **max_reemit_depth** (integer) (optional): How many times in a row an event can come back to this plugin. It is stopped as a loop when it comes back this many times. It can be 1 to 50. (see the section of "Events that keep coming back")
   * Default value: `10`
 
 ### \<rule\> section (optional) (multiple)
@@ -205,9 +205,11 @@ Alternatively, put `record_modifier` or `record_transformer` in front of this pl
 
 ### Events that keep coming back
 
-A re-emitted event can come back to this plugin, for example with `tag new.${tag}` in `<match **>`, or with `label @ROOT` in a top-level `<match>`. An event that comes back `max_reemit_depth` times in a row (10 by default) is stopped with `ReemitLoopError`, instead of being re-emitted until Fluentd stops with `SystemStackError`. The event is sent to `@ERROR` when `<label @ERROR>` is defined. Without it, the error goes back to the input, like other errors. If the events sent to `@ERROR` come back to this plugin too, for example when it is in `<label @ERROR>`, they are dropped, and the records are written to the error log.
+A re-emitted event can come back to this plugin, for example with `tag new.${tag}` in `<match **>`, or with `label @ROOT` in a top-level `<match>`. An event that comes back `max_reemit_depth` times in a row (10 by default) is stopped with `ReemitLoopError`, instead of being re-emitted until Fluentd stops with `SystemStackError`. The event is sent to `@ERROR` when `<label @ERROR>` is defined. Without it, the error goes back to the input, like other errors. It is raised once, from the outermost pass, so Fluentd logs it once. If the events sent to `@ERROR` come back to this plugin too, for example when it is in `<label @ERROR>`, they are dropped, and the records are written to the error log.
 
-An event that comes back many times can still leave the loop, for example when `remove_tag_regexp` and `tag ${tag}` remove one part of the tag on each pass. Raise `max_reemit_depth` for such a configuration.
+An event that comes back many times can still leave the loop, for example when `remove_tag_regexp` and `tag ${tag}` remove one part of the tag on each pass. Raise `max_reemit_depth` for such a configuration. It can be 50 at most, because each pass uses the stack of the thread: the stack of an input thread ran out after about 270 passes on Ruby 3.4, and after about 160 with `out_copy` in the path.
+
+The depth is counted for each plugin instance and each fiber, only while the emits are nested. A loop through a buffered output, or through `out_forward` and `in_forward`, starts again at depth 0 on each pass, and is not stopped.
 
 ### Nested attributes
 
