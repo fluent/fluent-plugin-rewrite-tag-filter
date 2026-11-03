@@ -41,7 +41,7 @@ For more details, see [Plugin Management](https://docs.fluentd.org/deployment/pl
 
 * **rewriterule\<num\>** (string) (optional) \<attribute\> \<regex_pattern\> \<new_tag\>
   * Obsoleted: Use \<rule\> section
-* **capitalize_regex_backreference** (bool) (optional): Capitalize letter for every matched regex backreference. (ex: maps -> Maps) for more details, see usage.
+* **capitalize_regex_backreference** (bool) (optional): Convert the first letter of every matched regex backreference to upper case and the rest to lower case, as Ruby's `String#capitalize` does. (ex: maps -> Maps, exampleMail -> Examplemail) for more details, see usage.
   * Default value: no
 * **remove_tag_prefix** (string) (optional): Remove tag prefix for tag placeholder. (see the section of "Tag placeholder")
 * **hostname_command** (string) (optional): Override hostname command for placeholder. (see the section of "Tag placeholder")
@@ -51,7 +51,8 @@ For more details, see [Plugin Management](https://docs.fluentd.org/deployment/pl
 
 ### \<rule\> section (optional) (multiple)
 
-* **key** (string) (required): The field name to which the regular expression is applied
+* **key** (string) (required): The field name to which the regular expression is applied.
+  A value that is not a String is converted with Ruby's `to_s` before matching. For a Hash or an Array, the result depends on the Ruby version (for example, `{"a"=>1}` before Ruby 3.4 and `{"a" => 1}` since Ruby 3.4), so point `key` at the value inside it with a nested key instead (see "Nested attributes").
 * **pattern** (regexp) (required): The regular expression.
   `/regexp/` is preferred because `/regexp/` style can support character classes such as `/[a-z]/`.
   The pattern without slashes will cause errors if you use patterns start with character classes.
@@ -362,15 +363,21 @@ For example, given this configuration:
     key     domain
     pattern ^(.*)\.example\.com$
     tag     other.$1
-    label   other
+    label   @other
   </rule>
 </match>
+
+<label @other>
+  <match other.**>
+    @type stdout
+  </match>
+</label>
 ```
 
 message: `{"domain": "www.example.com"}` will get its tag changed to 
 `web.apache.access`, while message 
 `{"domain": "api.example.com"}` will get its tag changed to `other.api` and
- be sent to label `other`
+ be sent to label `@other`, which must be defined with `<label>`.
 
 ## Example
 
