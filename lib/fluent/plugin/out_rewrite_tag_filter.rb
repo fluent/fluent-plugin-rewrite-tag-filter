@@ -92,6 +92,26 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     return label_router
   end
 
+  # A label that is not defined raises ArgumentError when its router is looked up. With <label @ERROR>, send only the
+  # records for that label to @ERROR, so the other records are re-emitted and not sent to @ERROR twice. Without it,
+  # raise the error as before, so that the input sees it.
+  def get_router_or_emit_errors(label)
+    get_router(label)
+  rescue ArgumentError => e
+    raise unless error_label_defined?
+    yield e
+    nil
+  end
+
+  def error_label_defined?
+    root_agent = Fluent::Engine.root_agent
+    return false if root_agent.nil?
+    root_agent.find_label(Fluent::RootAgent::ERROR_LABEL)
+    true
+  rescue ArgumentError
+    false
+  end
+
   def process(tag, es)
     placeholder = get_placeholder(tag)
     new_event_streams =  Hash.new {|hh, kk| hh[kk] = Hash.new {|h, k| h[k] = Fluent::MultiEventStream.new }}if @batch_mode
@@ -103,14 +123,18 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
         next
       end
       if new_event_streams.nil?
-        get_router(rewrited_label).emit(rewrited_tag, time, record)
+        labeled_router = get_router_or_emit_errors(rewrited_label) { |e| router.emit_error_event(tag, time, record, e) }
+        labeled_router.emit(rewrited_tag, time, record) if labeled_router
       else
         new_event_streams[rewrited_label][rewrited_tag].add(time, record)
       end
     end
     if !new_event_streams.nil?
       new_event_streams.each do |rewrited_label, label_event_streams |
-        labeled_router = get_router(rewrited_label)
+        labeled_router = get_router_or_emit_errors(rewrited_label) do |e|
+          label_event_streams.each_value { |new_es| new_es.each { |time, record| router.emit_error_event(tag, time, record, e) } }
+        end
+        next unless labeled_router
         label_event_streams.each do |rewrited_tag, new_es|
             labeled_router.emit_stream(rewrited_tag, new_es)
         end
