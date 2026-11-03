@@ -249,7 +249,7 @@ These example configurations can process nested attributes like following:
 
 When original tag is `kubernetes.var.log`, this will be converted to `default.kubernetes.var.log`.
 
-When a parent of the nested key cannot be read with the next key, such as `{"kubernetes": "text"}` or `{"kubernetes": ["x"]}` for the key above, the key is treated as missing (see "Handling records that do not have the key").
+When a parent of the nested key cannot be read with the next key, such as `{"kubernetes": "text"}` or `{"kubernetes": ["x"]}` for the key above, the key is treated as missing (see "Handling records that do not have the key"), and a warning is logged once for each rule.
 
 ### Tag placeholder
 
