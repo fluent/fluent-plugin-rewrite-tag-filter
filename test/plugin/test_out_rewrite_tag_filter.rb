@@ -706,4 +706,94 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal([{ "message" => "x" }], d.error_events.map { |_tag, _time, record, _error| record })
     end
   end
+
+  sub_test_case "re-emitted event that comes back to this plugin" do
+    test "label \"\" with the unchanged tag is skipped like no label" do
+      # remove_tag_prefix lets the startup check pass, and this tag does not have the prefix.
+      d = create_driver(%[
+        remove_tag_prefix other
+        <rule>
+          key message
+          pattern /.+/
+          tag ${tag}
+          label ""
+        </rule>
+      ])
+      d.run(default_tag: "input") { d.feed({ "message" => "x" }) }
+      assert_equal([], d.events)
+    end
+
+    # A router that sends every event back to the plugin, like a <match> that covers the new tag.
+    # The block, if given, receives the re-emitted events instead.
+    def route_back_to(plugin, &deliver)
+      deliver ||= ->(tag, es) { plugin.process(tag, es) }
+      router = Object.new
+      router.define_singleton_method(:emit) { |tag, time, record| deliver.call(tag, Fluent::OneEventStream.new(time, record)) }
+      router.define_singleton_method(:emit_stream) { |tag, es| deliver.call(tag, es) }
+      plugin.define_singleton_method(:get_router) { |_label| router }
+    end
+
+    data(EMIT_MODES)
+    test "a loop is stopped and the events go to @ERROR" do |mode|
+      d = create_driver(%[
+        emit_mode #{mode}
+        <rule>
+          key message
+          pattern /.+/
+          tag new.${tag}
+        </rule>
+      ])
+      route_back_to(d.instance)
+      es = Fluent::MultiEventStream.new
+      es.add(event_time, { "message" => "a" })
+      es.add(event_time, { "message" => "b" })
+      d.instance.process("input", es)
+
+      assert_equal(2, d.error_events.size)
+      tag, _time, record, error = d.error_events.first
+      assert_equal("new." * Fluent::Plugin::RewriteTagFilterOutput::MAX_REEMIT_DEPTH + "input", tag)
+      assert_equal({ "message" => "a" }, record)
+      assert_kind_of(Fluent::Plugin::RewriteTagFilterOutput::ReemitLoopError, error)
+    end
+
+    test "error events that come back from @ERROR are dropped" do
+      d = create_driver(%[
+        <rule>
+          key message
+          pattern /.+/
+          tag new.${tag}
+        </rule>
+      ])
+      plugin = d.instance
+      route_back_to(plugin)
+      # Like this plugin in <label @ERROR>: the error events come back to it too.
+      error_router = Object.new
+      error_router.define_singleton_method(:emit_error_event) { |tag, time, record, _e| plugin.process(tag, Fluent::OneEventStream.new(time, record)) }
+      plugin.define_singleton_method(:router) { error_router }
+      plugin.process("input", Fluent::OneEventStream.new(event_time, { "message" => "a" }))
+      assert_true(d.logs.any? { |l| l.include?("events sent to @ERROR came back to this plugin, so they are dropped") }, d.logs.inspect)
+    end
+
+    test "events that come back fewer times than the limit are re-emitted" do
+      d = create_driver(%[
+        <rule>
+          key message
+          pattern /.+/
+          tag new.${tag}
+        </rule>
+      ])
+      plugin = d.instance
+      delivered = []
+      # Come back twice, then go to another <match>.
+      route_back_to(plugin) do |tag, es|
+        tag.count(".") < 2 ? plugin.process(tag, es) : es.each { |_t, r| delivered << [tag, r] }
+      end
+      plugin.process("input", Fluent::OneEventStream.new(event_time, { "message" => "a" }))
+      assert_equal([["new.new.input", { "message" => "a" }]], delivered)
+      assert_equal([], d.error_events)
+      # The depth of the instance is removed, so it does not stay after a reload.
+      depths = Thread.current[Fluent::Plugin::RewriteTagFilterOutput::REEMIT_DEPTH_KEY]
+      assert_false(depths.key?(plugin.object_id))
+    end
+  end
 end

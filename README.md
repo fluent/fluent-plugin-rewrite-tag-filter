@@ -205,6 +205,8 @@ Alternatively, put `record_modifier` or `record_transformer` in front of this pl
 
 A record that raises an error in a rule is sent to the `@ERROR` label alone, and the other records in the event stream are re-emitted as usual. So is a record for a label that is not defined with `<label>`. Without `<label @ERROR>`, Fluentd logs the record in a warning and discards it.
 
+An event that comes back to this plugin 10 times in a row, for example with `tag new.${tag}` in `<match **>`, is also sent to `@ERROR`, with `ReemitLoopError`, instead of being re-emitted forever. If the error events come back to this plugin too, for example when it is in `<label @ERROR>`, they are dropped with an error log. `label ""` is the same as no label, so an event with the unchanged tag and `label ""` is skipped.
+
 A value in ASCII-8BIT, which `in_tail` gives when `encoding` is not set, is read as UTF-8 when the pattern has non-ASCII characters, so the pattern can match it. The bytes that are not valid UTF-8 are replaced with `?` for the pattern, as in a string with an invalid encoding. A pattern with only ASCII characters matches the bytes as before.
 
 ### Nested attributes

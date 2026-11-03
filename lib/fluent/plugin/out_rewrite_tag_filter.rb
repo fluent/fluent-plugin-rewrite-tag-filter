@@ -31,6 +31,13 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   end
 
   MATCH_OPERATOR_EXCLUDE = '!'
+  # A re-emitted event that comes back to this plugin is processed again in the same thread, nested in the emit.
+  # Stop it at this depth instead of letting it grow until SystemStackError stops Fluentd.
+  MAX_REEMIT_DEPTH = 10
+  # One key for all the instances: a Symbol made per instance would stay in memory after a reload.
+  REEMIT_DEPTH_KEY = :rewrite_tag_filter_reemit_depth
+
+  class ReemitLoopError < StandardError; end
 
   def configure(conf)
     super
@@ -78,13 +85,18 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   end
 
   def get_router(tgt_label)
-    label_router = if tgt_label.nil? || tgt_label.empty?
+    label_router = if no_label?(tgt_label)
         router
     else
         event_emitter_router(tgt_label)
     end
     #log.trace "Got router for #{tgt_label}: #{!label_router.nil?}"
     return label_router
+  end
+
+  # Label "" is the same as no label: the event goes back to the router that sent it here.
+  def no_label?(label)
+    label.nil? || label.empty?
   end
 
   # An undefined label raises ArgumentError when its router is looked up. Send the records for it to @ERROR one by one,
@@ -97,6 +109,31 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   end
 
   def process(tag, es)
+    # The depth of each instance, for the current fiber. An instance is removed when its depth goes back to 0.
+    depths = (Thread.current[REEMIT_DEPTH_KEY] ||= {})
+    depth = depths[object_id] || 0
+    depths[object_id] = depth + 1
+    begin
+      if depth < MAX_REEMIT_DEPTH
+        rewrite_and_emit(tag, es)
+      elsif depth == MAX_REEMIT_DEPTH
+        error = ReemitLoopError.new("events came back to this plugin #{depth} times in a row. Use a tag that this <match> does not cover")
+        es.each { |time, record| router.emit_error_event(tag, time, record, error) }
+      else
+        # The error events came back too, for example when this plugin is in <label @ERROR>. Sending them to @ERROR
+        # again would loop forever, so drop them.
+        log.error "rewrite_tag_filter: events sent to @ERROR came back to this plugin, so they are dropped. Use a tag that this <match> does not cover", tag: tag, records: es.size
+      end
+    ensure
+      if depth.zero?
+        depths.delete(object_id)
+      else
+        depths[object_id] = depth
+      end
+    end
+  end
+
+  def rewrite_and_emit(tag, es)
     placeholder = get_placeholder(tag)
     new_event_streams =  Hash.new {|hh, kk| hh[kk] = Hash.new {|h, k| h[k] = Fluent::MultiEventStream.new }}if @batch_mode
 
@@ -108,7 +145,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
         router.emit_error_event(tag, time, record, e)
         next
       end
-      if (rewrited_tag.nil? || tag == rewrited_tag) && rewrited_label.nil?
+      if (rewrited_tag.nil? || tag == rewrited_tag) && no_label?(rewrited_label)
         log.trace("rewrite_tag_filter: tag has not been rewritten", record)
         next
       end
