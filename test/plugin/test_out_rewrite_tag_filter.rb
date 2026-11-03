@@ -1,4 +1,6 @@
 require 'helper'
+require 'tmpdir'
+require 'shellwords'
 
 class RewriteTagFilterOutputTest < Test::Unit::TestCase
   def setup
@@ -7,6 +9,72 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
 
   def create_driver(conf)
     Fluent::Test::Driver::Output.new(Fluent::Plugin::RewriteTagFilterOutput).configure(conf)
+  end
+
+  sub_test_case "hostname_command" do
+    def hostname_conf(tag, command)
+      "hostname_command #{command}\n<rule>\n key message\n pattern /^(a)$/\n tag #{tag}\n</rule>\n"
+    end
+
+    # A command that works the same on sh and cmd.exe. A value that starts with a quote is read as a quoted string
+    # in the configuration, so the path of ruby is escaped for sh instead of quoted.
+    def ruby_command(code)
+      %Q[#{Shellwords.escape(RbConfig.ruby)} -e "#{code}"]
+    end
+
+    # Prints the bytes given in hex, so the command line has only ASCII characters.
+    def print_bytes_command(hex)
+      ruby_command("STDOUT.binmode; STDOUT.write ['#{hex}'].pack('H*')")
+    end
+
+    def with_default_external(encoding)
+      verbose, $VERBOSE = $VERBOSE, nil
+      original = Encoding.default_external
+      Encoding.default_external = encoding
+      yield
+    ensure
+      Encoding.default_external = original
+      $VERBOSE = verbose
+    end
+
+    test "runs only when a rule uses the hostname" do
+      Dir.mktmpdir do |dir|
+        marker = File.join(dir, "ran")
+        command = ruby_command("File.write('#{marker}', 'x')")
+        create_driver(hostname_conf("t.$1", command))
+        assert_false(File.exist?(marker))
+        create_driver(hostname_conf("t.${hostname}", command))
+        assert_true(File.exist?(marker))
+      end
+    end
+
+    test "a missing command does not stop the startup when no rule uses the hostname (#100)" do
+      assert_nothing_raised { create_driver(hostname_conf("t.$1", "no_such_command_for_test")) }
+    end
+
+    data(
+      "${hostname}"  => "t.${hostname}",
+      "__HOSTNAME__" => "t.__HOSTNAME__",
+    )
+    test "runs when a rule uses the hostname" do |tag|
+      d = create_driver(hostname_conf(tag, ruby_command("puts 'h1'")))
+      assert_equal("h1", d.instance.instance_variable_get(:@hostname))
+    end
+
+    test "a missing command stops the startup when a rule uses the hostname, as before" do
+      assert_raise(Errno::ENOENT) { create_driver(hostname_conf("t.${hostname}", "no_such_command_for_test")) }
+    end
+
+    data(
+      "invalid UTF-8"              => ["ff",                 Encoding::UTF_8],
+      "UTF-8 with LC_ALL=C"        => ["e3839be382b9e38388", Encoding::US_ASCII],
+    )
+    test "output that is not valid in the default external encoding does not stop the startup" do |(hex, encoding)|
+      with_default_external(encoding) do
+        d = create_driver(hostname_conf("t.${hostname}", print_bytes_command(hex)))
+        assert_equal([hex].pack('H*'), d.instance.instance_variable_get(:@hostname).b)
+      end
+    end
   end
 
   sub_test_case "configure" do

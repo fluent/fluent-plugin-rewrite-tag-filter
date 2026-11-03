@@ -37,7 +37,9 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
     @rewriterules = []
     rewriterule_names = []
-    @hostname = `#{@hostname_command}`.chomp
+    # The command does not run when no rule uses the hostname, so a missing command does not stop the startup.
+    uses_hostname = @rules.any? { |rule| rule.tag.include?('${hostname}') || rule.tag.include?('__HOSTNAME__') }
+    @hostname = uses_hostname ? `#{@hostname_command}`.chomp : ''
 
     @rules.each do |rule|
       unless rule.tag.match(/\$\{tag_parts\[\d\.\.\.?\d\]\}/).nil? or rule.tag.match(/__TAG_PARTS\[\d\.\.\.?\d\]__/).nil?

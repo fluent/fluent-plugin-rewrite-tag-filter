@@ -274,6 +274,10 @@ By default, execute command as `hostname` to get full hostname.
 On your needs, it could override hostname command using `hostname_command` option.  
 It comes short hostname with `hostname_command hostname -s` configuration specified.
 
+The command runs when the plugin is configured, and only when a rule uses `${hostname}` or `__HOSTNAME__`.
+
+To pick up a new hostname, reload the configuration, for example with `systemctl reload fluentd` or `SIGHUP` to the supervisor. See [Signals](https://docs.fluentd.org/deployment/signals) for details.
+
 #### Placeholder Usage
 
 It's a sample to rewrite a tag with placeholder.
