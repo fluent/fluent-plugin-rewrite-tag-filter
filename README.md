@@ -230,7 +230,22 @@ Bracket notation:
 </match>
 ```
 
-These example configurations can process nested attributes like following:
+An element of an Array is read with its index, such as `$.items[0].type` or `$['items'][0]['type']`:
+
+```
+<match app.**>
+  @type rewrite_tag_filter
+  <rule>
+    key $.items[0].type
+    pattern ^(.+)$
+    tag $1.${tag}
+  </rule>
+</match>
+```
+
+For `{"items": [{"type": "login"}, {"type": "logout"}]}` with the tag `app.log`, the key reads `login`, and the tag becomes `login.app.log`.
+
+The dot notation and bracket notation examples above can process nested attributes like following:
 
 ```
 {
