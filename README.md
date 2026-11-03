@@ -41,7 +41,7 @@ For more details, see [Plugin Management](https://docs.fluentd.org/deployment/pl
 
 * **rewriterule\<num\>** (string) (optional) \<attribute\> \<regex_pattern\> \<new_tag\>
   * Obsoleted: Use \<rule\> section
-* **capitalize_regex_backreference** (bool) (optional): Convert the first letter of every matched regex backreference to upper case and the rest to lower case, as Ruby's `String#capitalize` does. (ex: maps -> Maps, exampleMail -> Examplemail) for more details, see usage.
+* **capitalize_regex_backreference** (bool) (optional): Convert the first character of every matched regex backreference to upper case and the rest to lower case, as Ruby's `String#capitalize` does. (ex: maps -> Maps, exampleMail -> Examplemail) for more details, see usage.
   * Default value: no
 * **remove_tag_prefix** (string) (optional): Remove tag prefix for tag placeholder. (see the section of "Tag placeholder")
 * **hostname_command** (string) (optional): Override hostname command for placeholder. (see the section of "Tag placeholder")
@@ -52,7 +52,7 @@ For more details, see [Plugin Management](https://docs.fluentd.org/deployment/pl
 ### \<rule\> section (optional) (multiple)
 
 * **key** (string) (required): The field name to which the regular expression is applied.
-  A value that is not a String is converted with Ruby's `to_s` before matching. For a Hash or an Array, the result depends on the Ruby version (for example, `{"a"=>1}` before Ruby 3.4 and `{"a" => 1}` since Ruby 3.4), so point `key` at the value inside it with a nested key instead (see "Nested attributes").
+  A value that is not a String is converted with Ruby's `to_s` before matching. For a Hash or an Array, the result can change with the Ruby version or the locale (for example, `{"a"=>1}` before Ruby 3.4 and `{"a" => 1}` since Ruby 3.4), so point `key` at the value inside it with a nested key instead (see "Nested attributes").
 * **pattern** (regexp) (required): The regular expression.
   `/regexp/` is preferred because `/regexp/` style can support character classes such as `/[a-z]/`.
   The pattern without slashes will cause errors if you use patterns start with character classes.
@@ -75,7 +75,7 @@ It's a sample to exclude some static file log before split tag by domain.
   pos_file /var/log/td-agent/apache_access.pos
 </source>
 
-# "capitalize_regex_backreference yes" affects converting every matched first letter of backreference to upper case. ex: maps -> Maps
+# "capitalize_regex_backreference yes" converts the first character of every matched backreference to upper case and the rest to lower case. ex: maps -> Maps
 # At 2nd <rule>, redirect to tag named "clear" which unmatched for status code 200.
 # At 3rd <rule>, redirect to tag named "clear" which is not end with ".com"
 # At 6th <rule>, "site.$2$1" to be "site.ExampleMail" by capitalize_regex_backreference option.
