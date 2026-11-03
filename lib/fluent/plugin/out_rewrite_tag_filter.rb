@@ -16,7 +16,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   config_param :hostname_command, :string, :default => 'hostname'
   desc "The emit mode. If `batch`, this plugin will emit events per rewritten tag."
   config_param :emit_mode, :enum, list: [:record, :batch], default: :batch
-  desc "How many times in a row an event can come back to this plugin. It is stopped as a loop when it comes back this many times. 1 to 50."
+  desc "How many times in a row an event can come back to this plugin. It is stopped as a loop when it comes back this many times. 1 to 20."
   config_param :max_reemit_depth, :integer, default: 10
 
   config_section :rule, param_name: :rules, multi: true do
