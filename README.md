@@ -48,7 +48,7 @@ For more details, see [Plugin Management](https://docs.fluentd.org/deployment/pl
   * Default value: `hostname`
 * **emit_mode** (enum) (required): Specify emit_mode to `batch` or `record`. `batch` will emit events per rewritten tag, and decrease IO. `record` will emit events per record.
   * Default value: `batch`
-* **max_reemit_depth** (integer) (optional): How many times in a row an event can come back to this plugin. It is stopped as a loop when it comes back this many times. It can be 1 to 50. (see the section of "Events that keep coming back")
+* **max_reemit_depth** (integer) (optional): How many times in a row an event can come back to this plugin. It is stopped as a loop when it comes back this many times. It can be 1 to 20. (see the section of "Events that keep coming back")
   * Default value: `10`
 
 ### \<rule\> section (optional) (multiple)
@@ -208,9 +208,9 @@ Alternatively, put `record_modifier` or `record_transformer` in front of this pl
 
 A re-emitted event can come back to this plugin, for example with `tag new.${tag}` in `<match **>`, or with `label @ROOT` in a top-level `<match>`. An event that comes back `max_reemit_depth` times in a row (10 by default) is stopped with `ReemitLoopError`, instead of being re-emitted until Fluentd stops with `SystemStackError`. The event is sent to `@ERROR` when `<label @ERROR>` is defined. Without it, the error goes back to the input, like other errors. It is raised once, from the outermost pass, so Fluentd logs it once. If the events sent to `@ERROR` come back to this plugin too, for example when it is in `<label @ERROR>`, they are dropped, and the records are written to the error log.
 
-An event that comes back many times can still leave the loop, for example when `remove_tag_regexp` and `tag ${tag}` remove one part of the tag on each pass. Raise `max_reemit_depth` for such a configuration. It can be 50 at most, because each pass uses the stack of the thread: the stack of an input thread ran out after about 270 passes on Ruby 3.4, and after about 160 with `out_copy` in the path.
+An event that comes back many times can still leave the loop, for example when `remove_tag_regexp` and `tag ${tag}` remove one part of the tag on each pass. Raise `max_reemit_depth` for such a configuration. It can be 20 at most, because each pass uses the stack of the thread: with `out_copy` in the path, the stack of a thread ran out after 84 passes on Windows with Ruby 3.1, and after 157 or more on macOS and Linux.
 
-The depth is counted for each `<match>` (or `<store>` of `out_copy`) and each fiber, only while the emits are nested, so a loop through two `<match>` sections passes the events about twice as many times as `max_reemit_depth`. A loop through a buffered output, or through `out_forward` and `in_forward`, starts again at depth 0 on each pass, and is not stopped.
+The depth is counted for each `<match>` (or `<store>` of `out_copy`) and each fiber, only while the emits are nested, so a loop through two `<match>` sections passes the events about twice as many times as `max_reemit_depth`, and a loop through three about three times. A loop through a buffered output, or through `out_forward` and `in_forward`, starts again at depth 0 on each pass, and is not stopped.
 
 ### Nested attributes
 

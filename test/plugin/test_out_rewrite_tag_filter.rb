@@ -961,13 +961,13 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
   end
 
   sub_test_case "max_reemit_depth" do
-    data("0" => "0", "negative" => "-1", "over the limit" => "51")
-    test "must be between 1 and 50" do |value|
+    data("0" => "0", "negative" => "-1", "over the limit" => "21")
+    test "must be between 1 and 20" do |value|
       error = assert_raise(Fluent::ConfigError) { create_driver("max_reemit_depth #{value}\n" + rule_conf(tag: "new")) }
-      assert_equal("max_reemit_depth must be between 1 and 50", error.message)
+      assert_equal("max_reemit_depth must be between 1 and 20", error.message)
     end
 
-    data("1" => "1", "50" => "50")
+    data("1" => "1", "20" => "20")
     test "accepts the limits" do |value|
       assert_nothing_raised { create_driver("max_reemit_depth #{value}\n" + rule_conf(tag: "new")) }
     end
@@ -1061,9 +1061,9 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal(expected, events)
     end
 
-    # A loop through two <match> sections, both with out_copy, after 10 filters, with the largest max_reemit_depth. The
-    # events are passed 100 times in a row. Run in a thread, which has a smaller stack than the main thread, as an input
-    # does.
+    # A loop through three <match> sections, all with out_copy, after 10 filters, with the largest max_reemit_depth. The
+    # events are passed 60 times in a row. Run in a thread, which has a smaller stack than the main thread, as an input
+    # does. The stack of a thread ran out after 84 passes with out_copy on Windows with Ruby 3.1.
     test "the largest max_reemit_depth does not run out of the stack" do
       filters = (1..10).map { "<filter **>\n@type record_transformer\n</filter>\n" }.join
       rtf = ->(pattern, prefix) do
@@ -1072,7 +1072,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
             @type copy
             <store>
               @type rewrite_tag_filter
-              max_reemit_depth 50
+              max_reemit_depth 20
               <rule>
                 key message
                 pattern /.+/
@@ -1082,11 +1082,12 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
           </match>
         ]
       end
-      events = Thread.new { run_fluentd(filters + rtf.call("a.**", "b") + rtf.call("b.**", "a") + ERROR_LABEL_CONF, "a") }.value
+      loop_conf = rtf.call("a.**", "b") + rtf.call("b.**", "c") + rtf.call("c.**", "a")
+      events = Thread.new { run_fluentd(filters + loop_conf + ERROR_LABEL_CONF, "a") }.value
       assert_equal(1, events.size)
       assert_equal("error", events.first[0])
-      # "a" and 100 parts added by the passes.
-      assert_equal(101, events.first[1].split(".").size)
+      # "a" and 60 parts added by the passes.
+      assert_equal(61, events.first[1].split(".").size)
     end
 
     data(EMIT_MODES)
