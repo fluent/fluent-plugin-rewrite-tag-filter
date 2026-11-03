@@ -56,6 +56,41 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
         create_driver(conf)
       end
     end
+
+    sub_test_case "duplicated rules" do
+      def rules_conf(*rules)
+        rules.each_with_index.map { |(key, pattern, invert), i|
+          "<rule>\n key #{key}\n pattern #{pattern}\n tag t#{i}\n#{invert ? " invert true\n" : ""}</rule>\n"
+        }.join
+      end
+
+      data(
+        "same key and pattern"      => [["message", "/x/"], ["message", "/x/"]],
+        "pattern with and w/o slashes" => [["message", "x"], ["message", "/x/"]],
+        "same, both inverted"       => [["message", "/x/", true], ["message", "/x/", true]],
+        "inline option group"       => [["message", "/x/i"], ["message", "/(?i:x)/"]],
+        "non-capturing group"       => [["message", "/x/"], ["message", "/(?:x)/"]],
+        "escaped slashes"           => [["message", "^/api/"], ["message", "/^\\/api\\//"]],
+      )
+      test "are rejected" do |rules|
+        e = assert_raise(Fluent::ConfigError) do
+          create_driver(rules_conf(*rules))
+        end
+        assert_match(/duplicated rewriterules/, e.message)
+      end
+
+      data(
+        "key ending with ! and inverted key" => [["a!", "/x/"], ["a", "/x/", true]],
+        "invert differs"                     => [["message", "/x/"], ["message", "/x/", true]],
+        "pattern options differ"             => [["message", "/x/"], ["message", "/x/i"]],
+        "key differs"                        => [["message", "/x/"], ["other", "/x/"]],
+      )
+      test "different rules are accepted" do |rules|
+        assert_nothing_raised do
+          create_driver(rules_conf(*rules))
+        end
+      end
+    end
   end
 
   sub_test_case "section style" do
