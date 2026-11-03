@@ -37,6 +37,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
     @rewriterules = []
     rewriterule_names = []
+    @rule_keys = {}
+    @unreadable_key_warned = {}
     # The command does not run when no rule uses the hostname, so a missing command does not stop the startup.
     uses_hostname = @rules.any? { |rule| rule.tag.include?('${hostname}') || rule.tag.include?('__HOSTNAME__') }
     @hostname = uses_hostname ? `#{@hostname_command}`.chomp : ''
@@ -48,6 +50,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
       invert = rule.invert ? MATCH_OPERATOR_EXCLUDE : ""
       @rewriterules.push([record_accessor_create(rule.key), rule.pattern, invert, rule.tag, rule.label])
+      @rule_keys[@rewriterules.last.first] = rule.key
       rewriterule_names.push([rule.key, invert, rule.pattern.to_s])
       log.info "adding rewrite_tag_filter rule: #{rule.key} #{@rewriterules.last}"
     end
@@ -117,7 +120,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
   def rewrite_tag(tag, record, placeholder)
     @rewriterules.each do |record_accessor, regexp, match_operator, rewritetag, rewritelabel|
-      rewritevalue = record_accessor.call(record).to_s
+      rewritevalue = read_value(record_accessor, record)
       next if rewritevalue.empty? && match_operator != MATCH_OPERATOR_EXCLUDE
       last_match = regexp_last_match(regexp, rewritevalue)
       backreference_table = nil
@@ -145,6 +148,27 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
         placeholder[$2]
       end
     end
+  end
+
+  def read_value(record_accessor, record)
+    value = begin
+      record_accessor.call(record)
+    rescue TypeError => e
+      # A nested key whose parent cannot be read with the next key, such as $.log.level for {"log": "text"} or
+      # {"log": ["x"]}, is treated as a missing key. Accessor#keys is an Array only for a nested key. Other errors, such
+      # as a top-level key for a record that is not a Hash, are raised as before.
+      raise unless record.is_a?(Hash) && record_accessor.keys.is_a?(Array)
+      warn_unreadable_key(record_accessor, e)
+      nil
+    end
+    value.to_s
+  end
+
+  # Logged once for each rule, so that the log is not flooded. Two threads may both log it, which is harmless.
+  def warn_unreadable_key(record_accessor, error)
+    return if @unreadable_key_warned[record_accessor]
+    @unreadable_key_warned[record_accessor] = true
+    log.warn "rewrite_tag_filter: a parent in the nested key cannot be read with the next key, so the key is treated as missing. This is logged once for each rule", key: @rule_keys[record_accessor], error: error.message
   end
 
   def regexp_last_match(regexp, rewritevalue)
