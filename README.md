@@ -209,7 +209,7 @@ Alternatively, put `record_modifier` or `record_transformer` in front of this pl
 A re-emitted event can come back to this plugin, for example with `tag new.${tag}` in `<match **>`, or with `label @ROOT` in a top-level `<match>`. An event that comes back `max_reemit_depth` times in a row (10 by default) is stopped with `ReemitLoopError`, instead of being re-emitted until Fluentd stops with `SystemStackError`:
 
 * With `<label @ERROR>`, the event is sent to `@ERROR`. If it comes back to this plugin from there, for example when this plugin is in `<label @ERROR>`, it is dropped, and the record is written to the error log.
-* Without `<label @ERROR>`, the error goes back to the input, like other errors. It is raised once, so Fluentd logs it once.
+* Without `<label @ERROR>`, the error goes back to the input, like other errors. It is raised once from the pass that started the loop, not at each level of the nested emits.
 
 A chain that ends, for example `remove_tag_regexp` with `tag ${tag}`, which removes one part of the tag on each pass, may need a larger `max_reemit_depth`. It can be 20 at most, because each pass uses the stack of the thread: with `out_copy` in the path, the stack ran out after 84 passes on Windows with Ruby 3.1.
 
