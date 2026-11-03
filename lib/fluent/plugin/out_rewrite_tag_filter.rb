@@ -33,8 +33,6 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   end
 
   MATCH_OPERATOR_EXCLUDE = '!'
-  # The instances that are sending records to @ERROR, for the current fiber. One key for all the instances.
-  SENDING_TO_ERROR_KEY = :rewrite_tag_filter_sending_to_error
   # A re-emitted event that comes back to this plugin is processed again in the same thread, nested in the emit.
   # It is stopped at max_reemit_depth instead of growing until SystemStackError stops Fluentd.
   # Each pass uses the stack of the thread. With out_copy in the path, the stack of a thread ran out after 84 passes on
@@ -112,46 +110,10 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     return label_router
   end
 
-  # A label that is not defined raises ArgumentError when its router is looked up. With <label @ERROR>, send only the
-  # records for that label to @ERROR, so the other records are re-emitted and not sent to @ERROR twice. Without it,
-  # raise the error as in earlier versions, so that the input sees it.
-  #
-  # The records sent to @ERROR must not come back to this plugin and loop. When this plugin is in <label @ERROR>, raise
-  # before sending them. out_copy gives its own context router to the outputs in <store>, so this is also true for them.
-  # When they come back through another label, for example with relabel in <label @ERROR>, throw back to where they were
-  # sent and raise there, as if they had not been sent. Raising at the inner level would let an outer out_copy send them
-  # to its next <store> a second time.
-  #
-  # Fluentd makes the error with its backtrace for each lookup, which takes most of the time for a record in record
-  # mode. The label of a rule does not change, so lookup_errors keeps the error for each label during one process call.
-  def get_router_or_emit_errors(label, lookup_errors)
-    e = lookup_errors[label]
-    unless e
-      begin
-        return get_router(label)
-      rescue ArgumentError => lookup_error
-        e = lookup_errors[label] = lookup_error
-      end
-    end
-    error_router = own_root_agent&.error_collector
-    raise e if error_router.nil? || context_router.equal?(error_router)
-    sending = (Thread.current[SENDING_TO_ERROR_KEY] ||= {})
-    throw sending[object_id] if sending.key?(object_id)
-    begin
-      sent = catch do |sent_tag|
-        sending[object_id] = sent_tag
-        yield e
-        true
-      end
-    ensure
-      sending.delete(object_id)
-    end
-    raise e unless sent
-  end
-
-  # The root agent of the configuration that this plugin belongs to. Fluent::Engine.root_agent is the newest one: a
-  # reload replaces it before the old plugins stop. The handler of the router is the root agent, or the label that
-  # this plugin is in, and the label knows its root agent. The router of the test driver has no handler.
+  # The root agent of the configuration that this plugin belongs to, to see whether it has <label @ERROR>.
+  # Fluent::Engine.root_agent is the newest one: a reload replaces it before the old plugins stop. The handler of the
+  # router is the root agent, or the label that this plugin is in, and the label knows its root agent. The router of
+  # the test driver has no handler.
   def own_root_agent
     handler = router.respond_to?(:emit_error_handler) ? router.emit_error_handler : nil
     handler = handler.root_agent if handler.is_a?(Fluent::Label)
@@ -199,7 +161,6 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   def rewrite_and_emit(tag, es)
     placeholder = get_placeholder(tag)
     new_event_streams =  Hash.new {|hh, kk| hh[kk] = Hash.new {|h, k| h[k] = Fluent::MultiEventStream.new }}if @batch_mode
-    lookup_errors = {}
 
     es.each do |time, record|
       rewrited_tag, rewrited_label  = rewrite_tag(tag, record, placeholder)
@@ -208,41 +169,18 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
         next
       end
       if new_event_streams.nil?
-        labeled_router = get_router_or_emit_errors(rewrited_label, lookup_errors) do |e|
-          router.emit_error_event(tag, time, record, e)
-        end
-        labeled_router.emit(rewrited_tag, time, record) if labeled_router
+        get_router(rewrited_label).emit(rewrited_tag, time, record)
       else
         new_event_streams[rewrited_label][rewrited_tag].add(time, record)
       end
     end
     if !new_event_streams.nil?
       new_event_streams.each do |rewrited_label, label_event_streams |
-        labeled_router = get_router_or_emit_errors(rewrited_label, lookup_errors) do |e|
-          # Send the records for the label as one stream, so that Fluentd logs one warning for them, not one for each
-          # record. This is the handler that the router calls for an error in emit_stream.
-          error_es = Fluent::MultiEventStream.new
-          label_event_streams.each_value { |new_es| new_es.each { |time, record| error_es.add(time, record) } }
-          own_root_agent.handle_emits_error(tag, error_es, e)
-        end
-        next unless labeled_router
+        labeled_router = get_router(rewrited_label)
         label_event_streams.each do |rewrited_tag, new_es|
             labeled_router.emit_stream(rewrited_tag, new_es)
         end
       end
-    end
-    # Records were sent to @ERROR instead of raising the error, so count the stream in num_errors, as Fluentd does when
-    # process raises it.
-    count_num_error unless lookup_errors.empty?
-  end
-
-  # Fluentd has no method to count num_errors of an output. 1.14 and later count it in @num_errors_metrics, and earlier
-  # versions in @num_errors, with @counter_mutex or @counters_monitor.
-  def count_num_error
-    if @num_errors_metrics
-      @num_errors_metrics.inc
-    else
-      (@counter_mutex || @counters_monitor).synchronize { @num_errors += 1 }
     end
   end
 
