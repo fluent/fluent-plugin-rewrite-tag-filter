@@ -41,7 +41,7 @@ For more details, see [Plugin Management](https://docs.fluentd.org/deployment/pl
 
 * **rewriterule\<num\>** (string) (optional) \<attribute\> \<regex_pattern\> \<new_tag\>
   * Obsoleted: Use \<rule\> section
-* **capitalize_regex_backreference** (bool) (optional): Capitalize letter for every matched regex backreference. (ex: maps -> Maps) for more details, see usage.
+* **capitalize_regex_backreference** (bool) (optional): Convert the first character of every matched regex backreference to upper case and the rest to lower case, as Ruby's `String#capitalize` does. (ex: maps -> Maps, exampleMail -> Examplemail) for more details, see usage.
   * Default value: no
 * **remove_tag_prefix** (string) (optional): Remove tag prefix for tag placeholder. (see the section of "Tag placeholder")
 * **hostname_command** (string) (optional): Override hostname command for placeholder. (see the section of "Tag placeholder")
@@ -51,7 +51,8 @@ For more details, see [Plugin Management](https://docs.fluentd.org/deployment/pl
 
 ### \<rule\> section (optional) (multiple)
 
-* **key** (string) (required): The field name to which the regular expression is applied
+* **key** (string) (required): The field name to which the regular expression is applied.
+  A value that is not a String is converted with Ruby's `to_s` before matching. For a Hash or an Array, the result can change with the Ruby version or the locale (for example, `{"a"=>1}` before Ruby 3.4 and `{"a" => 1}` since Ruby 3.4), so point `key` at the value inside it with a nested key instead (see "Nested attributes").
 * **pattern** (regexp) (required): The regular expression.
   `/regexp/` is preferred because `/regexp/` style can support character classes such as `/[a-z]/`.
   The pattern without slashes will cause errors if you use patterns start with character classes.
@@ -74,7 +75,7 @@ It's a sample to exclude some static file log before split tag by domain.
   pos_file /var/log/td-agent/apache_access.pos
 </source>
 
-# "capitalize_regex_backreference yes" affects converting every matched first letter of backreference to upper case. ex: maps -> Maps
+# "capitalize_regex_backreference yes" converts the first character of every matched backreference to upper case and the rest to lower case. ex: maps -> Maps
 # At 2nd <rule>, redirect to tag named "clear" which unmatched for status code 200.
 # At 3rd <rule>, redirect to tag named "clear" which is not end with ".com"
 # At 6th <rule>, "site.$2$1" to be "site.ExampleMail" by capitalize_regex_backreference option.
@@ -275,6 +276,10 @@ By default, execute command as `hostname` to get full hostname.
 On your needs, it could override hostname command using `hostname_command` option.  
 It comes short hostname with `hostname_command hostname -s` configuration specified.
 
+The command runs when the plugin is configured, and only when a rule uses `${hostname}` or `__HOSTNAME__`.
+
+To pick up a new hostname, reload the configuration, for example with `systemctl reload fluentd` or `SIGHUP` to the supervisor. See [Signals](https://docs.fluentd.org/deployment/signals) for details.
+
 #### Placeholder Usage
 
 It's a sample to rewrite a tag with placeholder.
@@ -364,15 +369,21 @@ For example, given this configuration:
     key     domain
     pattern ^(.*)\.example\.com$
     tag     other.$1
-    label   other
+    label   @other
   </rule>
 </match>
+
+<label @other>
+  <match other.**>
+    @type stdout
+  </match>
+</label>
 ```
 
 message: `{"domain": "www.example.com"}` will get its tag changed to 
 `web.apache.access`, while message 
 `{"domain": "api.example.com"}` will get its tag changed to `other.api` and
- be sent to label `other`
+ be sent to label `@other`, which must be defined with `<label>`.
 
 ## Example
 

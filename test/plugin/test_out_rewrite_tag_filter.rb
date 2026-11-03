@@ -1,4 +1,6 @@
 require 'helper'
+require 'tmpdir'
+require 'shellwords'
 
 class RewriteTagFilterOutputTest < Test::Unit::TestCase
   def setup
@@ -16,6 +18,72 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
 
   def create_driver(conf)
     Fluent::Test::Driver::Output.new(Fluent::Plugin::RewriteTagFilterOutput).configure(conf)
+  end
+
+  sub_test_case "hostname_command" do
+    def hostname_conf(tag, command)
+      "hostname_command #{command}\n<rule>\n key message\n pattern /^(a)$/\n tag #{tag}\n</rule>\n"
+    end
+
+    # A command that works the same on sh and cmd.exe. A value that starts with a quote is read as a quoted string
+    # in the configuration, so the path of ruby is escaped for sh instead of quoted.
+    def ruby_command(code)
+      %Q[#{Shellwords.escape(RbConfig.ruby)} -e "#{code}"]
+    end
+
+    # Prints the bytes given in hex, so the command line has only ASCII characters.
+    def print_bytes_command(hex)
+      ruby_command("STDOUT.binmode; STDOUT.write ['#{hex}'].pack('H*')")
+    end
+
+    def with_default_external(encoding)
+      verbose, $VERBOSE = $VERBOSE, nil
+      original = Encoding.default_external
+      Encoding.default_external = encoding
+      yield
+    ensure
+      Encoding.default_external = original
+      $VERBOSE = verbose
+    end
+
+    test "runs only when a rule uses the hostname" do
+      Dir.mktmpdir do |dir|
+        marker = File.join(dir, "ran")
+        command = ruby_command("File.write('#{marker}', 'x')")
+        create_driver(hostname_conf("t.$1", command))
+        assert_false(File.exist?(marker))
+        create_driver(hostname_conf("t.${hostname}", command))
+        assert_true(File.exist?(marker))
+      end
+    end
+
+    test "a missing command does not stop the startup when no rule uses the hostname (#100)" do
+      assert_nothing_raised { create_driver(hostname_conf("t.$1", "no_such_command_for_test")) }
+    end
+
+    data(
+      "${hostname}"  => "t.${hostname}",
+      "__HOSTNAME__" => "t.__HOSTNAME__",
+    )
+    test "runs when a rule uses the hostname" do |tag|
+      d = create_driver(hostname_conf(tag, ruby_command("puts 'h1'")))
+      assert_equal("h1", d.instance.instance_variable_get(:@hostname))
+    end
+
+    test "a missing command stops the startup when a rule uses the hostname, as before" do
+      assert_raise(Errno::ENOENT) { create_driver(hostname_conf("t.${hostname}", "no_such_command_for_test")) }
+    end
+
+    data(
+      "invalid UTF-8"              => ["ff",                 Encoding::UTF_8],
+      "UTF-8 with LC_ALL=C"        => ["e3839be382b9e38388", Encoding::US_ASCII],
+    )
+    test "output that is not valid in the default external encoding does not stop the startup" do |(hex, encoding)|
+      with_default_external(encoding) do
+        d = create_driver(hostname_conf("t.${hostname}", print_bytes_command(hex)))
+        assert_equal([hex].pack('H*'), d.instance.instance_variable_get(:@hostname).b)
+      end
+    end
   end
 
   sub_test_case "configure" do
@@ -63,6 +131,41 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       ]
       assert_raise(Fluent::ConfigError) do
         create_driver(conf)
+      end
+    end
+
+    sub_test_case "duplicated rules" do
+      def rules_conf(*rules)
+        rules.each_with_index.map { |(key, pattern, invert), i|
+          "<rule>\n key #{key}\n pattern #{pattern}\n tag t#{i}\n#{invert ? " invert true\n" : ""}</rule>\n"
+        }.join
+      end
+
+      data(
+        "same key and pattern"      => [["message", "/x/"], ["message", "/x/"]],
+        "pattern with and w/o slashes" => [["message", "x"], ["message", "/x/"]],
+        "same, both inverted"       => [["message", "/x/", true], ["message", "/x/", true]],
+        "inline option group"       => [["message", "/x/i"], ["message", "/(?i:x)/"]],
+        "non-capturing group"       => [["message", "/x/"], ["message", "/(?:x)/"]],
+        "escaped slashes"           => [["message", "^/api/"], ["message", "/^\\/api\\//"]],
+      )
+      test "are rejected" do |rules|
+        e = assert_raise(Fluent::ConfigError) do
+          create_driver(rules_conf(*rules))
+        end
+        assert_match(/duplicated rewriterules/, e.message)
+      end
+
+      data(
+        "key ending with ! and inverted key" => [["a!", "/x/"], ["a", "/x/", true]],
+        "invert differs"                     => [["message", "/x/"], ["message", "/x/", true]],
+        "pattern options differ"             => [["message", "/x/"], ["message", "/x/i"]],
+        "key differs"                        => [["message", "/x/"], ["other", "/x/"]],
+      )
+      test "different rules are accepted" do |rules|
+        assert_nothing_raised do
+          create_driver(rules_conf(*rules))
+        end
       end
     end
   end
@@ -398,6 +501,24 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal 1, events.length
       assert_equal "app.?", events[0][0]
       assert_equal invalid_ascii, events[0][2]['client_name']
+    end
+
+    test "capitalize_regex_backreference with an unmatched optional group" do
+      conf = %[
+        capitalize_regex_backreference yes
+        <rule>
+          key domain
+          pattern ^(www\\.)?([a-z]+)\\.com$
+          tag site.$1$2
+        </rule>
+      ]
+      d = create_driver(conf)
+      d.run(default_tag: "input") do
+        d.feed({ "domain" => "www.example.com" })
+        d.feed({ "domain" => "example.com" })
+      end
+      events = d.events
+      assert_equal ["site.Www.Example", "site.Example"], events.map { |e| e[0] }
     end
 
     test "nested key support with dot notation" do
