@@ -892,12 +892,14 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_reemit_state_is_clean
     end
 
-    # The tag loses one part on each pass, and reaches <match m> after 12 passes.
+    # The tag loses one part on each pass. "m" reaches <match m> after 12 passes. "k" is not re-emitted at its pass, the
+    # 11th, so the chain ends there with the default limit too, as on master.
     data(
-      "default limit" => ["", [["error", "k.l.m", { "message" => "a" }]]],
-      "limit of 20"   => ["max_reemit_depth 20", [["out", "m", { "message" => "a" }]]],
+      "default limit"          => ["", "a.b.c.d.e.f.g.h.i.j.k.l.m", [["error", "k.l.m", { "message" => "a" }]]],
+      "limit of 20"            => ["max_reemit_depth 20", "a.b.c.d.e.f.g.h.i.j.k.l.m", [["out", "m", { "message" => "a" }]]],
+      "ends at the last pass"  => ["", "a.b.c.d.e.f.g.h.i.j.k", []],
     )
-    test "a chain that ends is stopped only when it is longer than max_reemit_depth" do |(param, expected)|
+    test "a chain that ends is stopped only when it is longer than max_reemit_depth" do |(param, tag, expected)|
       events = run_fluentd(%[
         <match m>
           @type rewrite_tag_filter_test_collect
@@ -912,37 +914,360 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
             tag ${tag}
           </rule>
         </match>
-      ] + ERROR_LABEL_CONF, "a.b.c.d.e.f.g.h.i.j.k.l.m")
+      ] + ERROR_LABEL_CONF, tag)
       assert_equal(expected, events)
+      assert_equal(expected.none? { |name, _tag, _record| name == "error" }, $log.out.logs.grep(/ReemitLoopError/).empty?, $log.out.logs.inspect)
+      assert_reemit_state_is_clean
     end
 
-    # A loop through three <match> sections, all with out_copy, after 10 filters, with the largest max_reemit_depth. The
-    # events are passed 60 times in a row. Run in a thread, which has a smaller stack than the main thread, as an input
-    # does. The stack of a thread ran out after 84 passes with out_copy on Windows with Ruby 3.1.
-    test "the largest max_reemit_depth does not run out of the stack" do
+    # A ring of <match> sections, each with out_copy, after 10 filters: s1 re-emits to s2, and the last one to s1. Each
+    # pass adds a part to the tag. depths: the max_reemit_depth of each section, the last one for the rest.
+    def ring_conf(depths, sections: depths.size, error_label: ERROR_LABEL_CONF)
       filters = (1..10).map { "<filter **>\n@type record_transformer\n</filter>\n" }.join
-      rtf = ->(pattern, prefix) do
+      ring = (1..sections).map do |i|
         %[
-          <match #{pattern}>
+          <match s#{i}.**>
             @type copy
             <store>
               @type rewrite_tag_filter
-              max_reemit_depth 20
+              max_reemit_depth #{depths[i - 1] || depths.last}
               <rule>
                 key message
                 pattern /.+/
-                tag #{prefix}.${tag}
+                tag s#{i % sections + 1}.${tag}
               </rule>
             </store>
           </match>
         ]
       end
-      loop_conf = rtf.call("a.**", "b") + rtf.call("b.**", "c") + rtf.call("c.**", "a")
-      events = Thread.new { run_fluentd(filters + loop_conf + ERROR_LABEL_CONF, "a") }.value
+      filters + ring.join + error_label
+    end
+
+    # Runs in a thread, which has a smaller stack than the main thread, as an input does, or in a fiber in it, which has
+    # a smaller one still. Returns the events and the state left in the thread or the fiber.
+    def run_nested(where, &block)
+      run_in_thread(30) do
+        if where == :fiber
+          Fiber.new { [block.call, reemit_state] }.resume
+        else
+          [block.call, reemit_state]
+        end
+      end
+    end
+
+    # max_reemit_depth is counted for each section, so a ring of 12 sections with the largest one would nest 240 passes.
+    # The passes of all the sections in a row are stopped at 20 too. With 10 filters and out_copy, the stack of a thread
+    # ran out after 84 passes on Windows with Ruby 3.1, and the stack of a fiber after 67 on Linux with Ruby 3.2.
+    data(
+      "3 sections, limit of 20, thread"  => [3, 20, :thread],
+      "12 sections, limit of 20, thread" => [12, 20, :thread],
+      "4 sections, limit of 20, fiber"   => [4, 20, :fiber],
+      "8 sections, default limit, fiber" => [8, 10, :fiber],
+      "12 sections, limit of 20, fiber"  => [12, 20, :fiber],
+    )
+    test "the passes of all the sections are stopped at 20 in a row, within the stack" do |(sections, depth, where)|
+      events, state = run_nested(where) { run_fluentd(ring_conf([depth], sections: sections), "s1") }
       assert_equal(1, events.size)
       assert_equal("error", events.first[0])
-      # "a" and 60 parts added by the passes.
-      assert_equal(61, events.first[1].split(".").size)
+      # "s1" and 20 parts added by the passes.
+      assert_equal(21, events.first[1].split(".").size)
+      assert_equal(1, $log.out.logs.grep(/were re-emitted by rewrite_tag_filter 20 times in a row in the nested emits, counting the passes of all the <match> sections/).size, $log.out.logs.inspect)
+      assert_reemit_state_is_clean(state)
+    end
+
+    # The first limit reached stops the loop: the depth of a section, or 20 passes of all the sections.
+    data(
+      "s1 with 3 and s2 with 20" => [[3, 20], 7, /came back to this plugin 3 times in a row/],
+      "s1 with 20 and s2 with 3" => [[20, 3], 8, /came back to this plugin 3 times in a row/],
+      "both with 20"             => [[20, 20], 21, /were re-emitted by rewrite_tag_filter 20 times in a row/],
+      # s1 reaches its depth of 10 at the 21st pass, where the passes in a row reach 20 too.
+      "both with 10"             => [[10, 10], 21, /came back to this plugin 10 times in a row/],
+      "s1 with 9 and s2 with 10" => [[9, 10], 19, /came back to this plugin 9 times in a row/],
+    )
+    test "sections with different max_reemit_depth are stopped at the first limit" do |(depths, parts, message)|
+      events, state = run_nested(:thread) { run_fluentd(ring_conf(depths), "s1") }
+      assert_equal([["error", parts]], events.map { |name, tag, _record| [name, tag.split(".").size] })
+      assert_equal(1, $log.out.logs.grep(message).size, $log.out.logs.inspect)
+      assert_reemit_state_is_clean(state)
+    end
+
+    # The events that @ERROR sends back to the ring come to the section that was stopped, so they are dropped.
+    data(
+      "stopped at 20 passes, thread"      => [[20], 12, :thread],
+      "stopped at 20 passes, fiber"       => [[20], 12, :fiber],
+      "stopped at a section limit, fiber" => [[3, 20], 2, :fiber],
+    )
+    test "events sent back from @ERROR to a ring are dropped" do |(depths, sections, where)|
+      events, state = run_nested(where) do
+        run_fluentd(ring_conf(depths, sections: sections, error_label: ERROR_LABEL_RELABEL_CONF), "s1")
+      end
+      assert_equal(["error"], events.map(&:first))
+      assert_equal(1, $log.out.logs.grep(/an event sent to @ERROR came back to this plugin/).size, $log.out.logs.inspect)
+      assert_reemit_state_is_clean(state)
+    end
+
+    # The events of a ring stopped at 20 passes in a row are sent to @ERROR once each section of the ring is back at
+    # its outermost pass, so that a rewrite_tag_filter in <label @ERROR> can still re-emit them.
+    data(
+      "3 sections, default limit, thread"  => [[10], 3, :thread],
+      "12 sections, limit of 20, thread"   => [[20], 12, :thread],
+      "12 sections, limit of 20, fiber"    => [[20], 12, :fiber],
+      "s1 with 3 and s2 with 20, fiber"    => [[3, 20], 2, :fiber],
+    )
+    test "a rewrite_tag_filter in <label @ERROR> routes the events of a stopped ring" do |(depths, sections, where)|
+      error_label = %[
+        <label @ERROR>
+          <match routed.**>
+            @type rewrite_tag_filter_test_collect
+            name routed
+          </match>
+          <match **>
+            @type rewrite_tag_filter
+            <rule>
+              key message
+              pattern /.+/
+              tag routed.${tag}
+            </rule>
+          </match>
+        </label>
+      ]
+      events, state = run_nested(where) { run_fluentd(ring_conf(depths, sections: sections, error_label: error_label), "s1") }
+      assert_equal(["routed"], events.map(&:first))
+      assert_equal([], $log.out.logs.grep(/came back to this plugin, so it is dropped/))
+      assert_reemit_state_is_clean(state)
+    end
+
+    # A <store> next to each pass of the loop leads the record out of it. Only its pass at the 21st level, which cannot
+    # re-emit, is stopped, and its record is the one of the stopped loop, sent to @ERROR once. Its other passes go out.
+    data(
+      "1 section, limit of 20"   => [1, 20],
+      "2 sections, limit of 20"  => [2, 20],
+      "2 sections, default limit" => [2, 10],
+    )
+    test "a <store> that leads out of a loop stopped at 20 passes in a row goes on" do |(sections, depth)|
+      conf = (1..sections).map { |i| %[
+        <match s#{i}.**>
+          @type copy
+          <store>
+            @type rewrite_tag_filter
+            max_reemit_depth #{depth}
+            #{rule_conf(pattern: "/.+/", tag: "s#{i % sections + 1}.${tag}")}
+          </store>
+          <store>
+            @type rewrite_tag_filter
+            #{rule_conf(pattern: "/.+/", tag: "out.${tag}")}
+          </store>
+        </match>
+      ] }.join + %[
+        <match out.**>
+          @type rewrite_tag_filter_test_collect
+          name out
+        </match>
+      ] + ERROR_LABEL_CONF
+      events, state = run_nested(:fiber) { run_fluentd(conf, "s1") }
+      assert_equal({ "out" => 20, "error" => 1 }, events.group_by(&:first).map { |name, list| [name, list.size] }.to_h)
+      assert_equal((2..21).to_a, events.select { |name, _tag, _record| name == "out" }.map { |_name, tag, _record| tag.split(".").size }.sort)
+      assert_reemit_state_is_clean(state)
+    end
+
+    # The events are sent to @ERROR from the nested emits, where the passes can nest 10 more, so that a
+    # rewrite_tag_filter in <label @ERROR> routes them, after a chain of 21 sections, or after a long chain into a ring.
+    data(
+      "a chain of 21 sections"              => ["chain", "c1"],
+      "a ring after a chain of 19 sections" => ["ring", "c1"],
+    )
+    test "a rewrite_tag_filter in <label @ERROR> routes the events of a long chain stopped at 20 passes" do |(kind, tag)|
+      chain = (1..19).map { |i| %[
+        <match c#{i}>
+          @type rewrite_tag_filter
+          #{rule_conf(pattern: "/.+/", tag: i < 19 ? "c#{i + 1}" : (kind == "chain" ? "c20" : "r1"))}
+        </match>
+      ] }.join
+      rest = if kind == "chain"
+        %[
+          <match c20>
+            @type rewrite_tag_filter
+            #{rule_conf(pattern: "/.+/", tag: "c21")}
+          </match>
+          <match c21>
+            @type rewrite_tag_filter
+            #{rule_conf(pattern: "/.+/", tag: "done")}
+          </match>
+        ]
+      else
+        %[
+          <match r1.** r1>
+            @type rewrite_tag_filter
+            #{rule_conf(pattern: "/.+/", tag: "r2.${tag}")}
+          </match>
+          <match r2.**>
+            @type rewrite_tag_filter
+            #{rule_conf(pattern: "/.+/", tag: "r1.${tag}")}
+          </match>
+        ]
+      end
+      error_label = %[
+        <label @ERROR>
+          <match routed.**>
+            @type rewrite_tag_filter_test_collect
+            name routed
+          </match>
+          <match **>
+            @type rewrite_tag_filter
+            #{rule_conf(pattern: "/.+/", tag: "routed.${tag}")}
+          </match>
+        </label>
+      ]
+      events, state = run_nested(:fiber) { run_fluentd(chain + rest + error_label, tag) }
+      assert_equal(["routed"], events.map(&:first))
+      assert_equal([], $log.out.logs.grep(/came back to this plugin, so it is dropped/))
+      assert_reemit_state_is_clean(state)
+    end
+
+    # The deepest nesting: a loop in <label @ERROR> itself, after 10 filters, with out_copy, while the events of a ring
+    # stopped at 20 passes in a row are sent there. It is stopped at 30 passes in a row, and its events come back to
+    # @ERROR, so they are dropped.
+    data("thread" => :thread, "fiber" => :fiber)
+    test "a loop in <label @ERROR> is stopped at 30 passes in a row, within the stack" do |where|
+      filters = (1..10).map { "<filter **>\n@type record_transformer\n</filter>\n" }.join
+      error_label = %[
+        <label @ERROR>
+          #{filters}
+          <match s*.** e.**>
+            @type copy
+            <store>
+              @type rewrite_tag_filter
+              max_reemit_depth 20
+              #{rule_conf(pattern: "/.+/", tag: "e.${tag}")}
+            </store>
+          </match>
+        </label>
+      ]
+      events, state = run_nested(where) { run_fluentd(ring_conf([20], sections: 12, error_label: error_label), "s1") }
+      assert_equal([], events)
+      assert_equal(1, $log.out.logs.grep(/were re-emitted by rewrite_tag_filter 30 times in a row/).size, $log.out.logs.inspect)
+      assert_equal(1, $log.out.logs.grep(/came back to this plugin, so it is dropped/).size, $log.out.logs.inspect)
+      assert_reemit_state_is_clean(state)
+    end
+
+    # The events of a chain of 21 sections are sent to @ERROR at 20 passes in a row, into a chain of 11 sections there,
+    # which is stopped at 30. Its events come back to the section that was stopped, so they are dropped, instead of being
+    # sent to @ERROR again and again.
+    data("thread" => :thread, "fiber" => :fiber)
+    test "events stopped while they are sent to @ERROR are dropped when they come back" do |where|
+      chain = ->(prefix, count, last) do
+        (1..count).map { |i| %[
+          <match #{prefix}#{i}>
+            @type rewrite_tag_filter
+            #{rule_conf(pattern: "/.+/", tag: i < count ? "#{prefix}#{i + 1}" : last)}
+          </match>
+        ] }.join
+      end
+      conf = chain.call("c", 21, "done") + %[
+        <label @ERROR>
+          <match c21>
+            @type rewrite_tag_filter
+            #{rule_conf(pattern: "/.+/", tag: "e1")}
+          </match>
+          #{chain.call("e", 11, "edone")}
+          <match edone>
+            @type rewrite_tag_filter_test_collect
+            name error
+          </match>
+        </label>
+      ]
+      events, state = run_nested(where) { run_fluentd(conf, "c1") }
+      assert_equal([], events)
+      assert_equal(1, $log.out.logs.grep(/came back to this plugin, so it is dropped/).size, $log.out.logs.inspect)
+      assert_reemit_state_is_clean(state)
+    end
+
+    # Without <label @ERROR>, the other events of the emit go on, and the error is raised when the outermost pass returns.
+    data(
+      "loop first, batch"  => [%w[a b], "batch"],
+      "loop first, record" => [%w[a b], "record"],
+      "exit first, record" => [%w[b a], "record"],
+    )
+    test "without <label @ERROR>, the other events go on until the error is raised" do |(messages, mode)|
+      conf = %[
+        <match input>
+          @type rewrite_tag_filter
+          emit_mode #{mode}
+          #{rule_conf(pattern: "/^a$/", tag: "s1")}
+          #{rule_conf(pattern: "/^b$/", tag: "done")}
+        </match>
+        <match done>
+          @type rewrite_tag_filter_test_collect
+          name done
+        </match>
+      ] + ring_conf([20], sections: 12, error_label: "")
+      result, state = run_nested(:fiber) do
+        begin
+          run_fluentd(conf, "input", messages.map { |message| { "message" => message } })
+        rescue Fluent::Plugin::RewriteTagFilterOutput::ReemitLoopError => e
+          [e, RewriteTagFilterTestCollectOutput.events.dup]
+        end
+      end
+      assert_kind_of(Fluent::Plugin::RewriteTagFilterOutput::ReemitLoopError, result[0])
+      assert_equal([["done", "done", { "message" => "b" }]], result[1])
+      assert_reemit_state_is_clean(state)
+    end
+
+    # Without <label @ERROR>, another <store> of the out_copy raises an error after the loop is stopped. That error goes
+    # back to the input, and the error of the loop is kept in the log.
+    test "without <label @ERROR>, the error of a loop is logged when another error goes back to the input" do
+      conf = %[
+        <match input>
+          @type rewrite_tag_filter
+          #{rule_conf(pattern: "/.+/", tag: "s1")}
+        </match>
+        <match s1.** s1>
+          @type copy
+          <store>
+            @type rewrite_tag_filter
+            #{rule_conf(pattern: "/.+/", tag: "s1.${tag}")}
+          </store>
+          <store>
+            @type rewrite_tag_filter_test_raise
+          </store>
+        </match>
+      ]
+      error, state = run_nested(:thread) do
+        begin
+          run_fluentd(conf, "input")
+          nil
+        rescue => e
+          e
+        end
+      end
+      assert_kind_of(StandardError, error)
+      assert_not_kind_of(Fluent::Plugin::RewriteTagFilterOutput::ReemitLoopError, error)
+      assert_equal(1, $log.out.logs.grep(/a loop was stopped in this emit, but another error goes back to the input/).size, $log.out.logs.inspect)
+      assert_reemit_state_is_clean(state)
+    end
+
+    # Without <label @ERROR>, the error is kept until the outermost pass returns, here of the section before the ring,
+    # so that Fluentd logs it once.
+    data("thread" => :thread, "fiber" => :fiber)
+    test "without <label @ERROR>, the error of a ring is raised once by the outermost pass" do |where|
+      conf = %[
+        <match input>
+          @type rewrite_tag_filter
+          #{rule_conf(pattern: "/.+/", tag: "s1")}
+        </match>
+      ] + ring_conf([20], sections: 12, error_label: "")
+      error, state = run_nested(where) do
+        begin
+          run_fluentd(conf, "input")
+          nil
+        rescue Fluent::Plugin::RewriteTagFilterOutput::ReemitLoopError => e
+          e
+        end
+      end
+      assert_not_nil(error)
+      assert_match(/were re-emitted by rewrite_tag_filter 20 times in a row/, error.message)
+      assert_equal(1, $log.out.logs.grep(/emit transaction failed/).size, $log.out.logs.grep(/emit transaction failed/).inspect)
+      assert_reemit_state_is_clean(state)
     end
 
     data(EMIT_MODES)
@@ -999,12 +1324,12 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
 
     def reemit_state(thread = Thread.current)
       state = thread[Fluent::Plugin::RewriteTagFilterOutput::REEMIT_STATE_KEY]
-      [state.depths, state.errors, state.scopes.map { |scope| scope.to_a.map { |value| value.is_a?(Hash) ? value.to_a : value } }]
+      [state.depths, state.nesting, state.sending_errors, state.error, state.scopes.map { |scope| scope.to_a.map { |value| value.is_a?(Hash) ? value.to_a : value } }]
     end
 
     # Nothing about an instance is left for the next emit.
     def assert_reemit_state_is_clean(state = reemit_state)
-      assert_equal([{}, {}, [[nil, nil, nil, [], [], [], []]]], state)
+      assert_equal([{}, 0, 0, nil, [[nil, nil, nil, [], [], [], []]]], state)
     end
 
     def copy_loop_conf(stores, error_label)
