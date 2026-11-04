@@ -1,6 +1,7 @@
 require 'helper'
 require 'tmpdir'
 require 'shellwords'
+require 'fluent/plugin/input'
 
 # An output that keeps the events it gets, to see where Fluentd routes the events.
 class RewriteTagFilterTestCollectOutput < Fluent::Plugin::Output
@@ -69,6 +70,11 @@ class RewriteTagFilterTestEmitInShutdownOutput < Fluent::Plugin::Output
 
   def process(_tag, _es)
   end
+end
+
+# An input that emits nothing, so that the configuration has an input, which Fluentd shuts down first.
+class RewriteTagFilterTestInput < Fluent::Plugin::Input
+  Fluent::Plugin.register_input("rewrite_tag_filter_test_input", self)
 end
 
 # A filter that passes the events.
@@ -2014,11 +2020,13 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal([["new", "r.input", { "message" => "in shutdown" }]], RewriteTagFilterTestCollectOutput.events)
     end
 
-    # <label @B> only sends to @C, which is defined first, so @C drops its router before @B is shut down.
-    data(EMIT_MODES)
-    test "during a reload, a label that sends to a label shut down before it is looked up again" do |mode|
+    # <label @B> only sends to @C, which is defined first, so @C drops its router before @B is shut down. With an input,
+    # the input runs after_shutdown first.
+    data("batch" => ["batch", false], "record" => ["record", false],
+         "batch, with an input" => ["batch", true], "record, with an input" => ["record", true])
+    test "during a reload, a label that sends to a label shut down before it is looked up again" do |(mode, input)|
       conf = lambda do |name|
-        Fluent::Config.parse(%[
+        Fluent::Config.parse((input ? "<source>\n@type rewrite_tag_filter_test_input\n</source>\n" : "") + %[
           <label @C>
             <match r.**>
               @type rewrite_tag_filter
@@ -2056,6 +2064,21 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       Fluent::Engine.reload_config(conf.call("new"), supervisor: true)
       assert_nil(RewriteTagFilterTestEmitInShutdownOutput.error)
       assert_equal([["new", "c.r.input", { "message" => "in shutdown" }]], RewriteTagFilterTestCollectOutput.events)
+    end
+
+    # After a zero-downtime restart, Fluentd starts the plugins with RootAgent#cancel_source_only!, while the lifecycle
+    # still has only the inputs that are ready for it, and the agent that keeps the events meanwhile, which it shuts down
+    # right after.
+    test "after a zero-downtime restart, the routers of the labels are still kept" do
+      omit("this Fluentd has no zero-downtime restart") unless Fluent::RootAgent.const_defined?(:SourceOnlyMode)
+      Fluent::Engine.init(Fluent::SystemConfig.new, start_in_parallel: true)
+      root_agent = configure_fluentd("<source>\n@type rewrite_tag_filter_test_input\n</source>\n" + label_conf("out"))
+      lookups = count_lookups(root_agent.outputs.first)
+      root_agent.start
+      @started << root_agent
+      root_agent.cancel_source_only!
+      assert_equal([["out", "new.input", { "message" => "a" }]], emit_one(root_agent.event_router))
+      assert_equal([], lookups)
     end
 
     test "after the configuration of this plugin is shut down, the events go to the configuration that Fluentd runs" do

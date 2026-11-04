@@ -405,7 +405,7 @@ message: `{"domain": "www.example.com"}` will get its tag changed to
 `{"domain": "api.example.com"}` will get its tag changed to `other.api` and
  be sent to label `@other`, which must be defined with `<label>`.
 
-The label is looked up when the plugin starts, in the configuration that the `<match>` section belongs to, as `@label` is looked up once. During a reload, the events that this plugin re-emits go to that label of the old configuration until its shutdown comes to `after_shutdown`, where Fluentd drops the routers of the plugins. After that, the label is looked up in the configuration that Fluentd runs, as before. An output with a memory buffer drops the events that come to it after its flush at shutdown, and in the new configuration before it starts, as before. A label that is not defined in the configuration of the `<match>` section raises the error, even when the new configuration defines it.
+The label is looked up when the plugin starts, in the configuration that the `<match>` section belongs to, as `@label` is looked up once. During a reload, the events that this plugin re-emits go to that label of the old configuration until its shutdown comes to `after_shutdown`, where Fluentd drops the routers of the plugins. Until then, a label that is not defined in the configuration of the `<match>` section raises the error, even when the new configuration defines it. After that, the label is looked up in the configuration that Fluentd runs, as before. An output with a memory buffer drops the events that come to it after its flush at shutdown, and in the new configuration before it starts, as before.
 
 ## Example
 

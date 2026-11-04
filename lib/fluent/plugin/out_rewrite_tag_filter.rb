@@ -132,7 +132,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     @batch_mode = @emit_mode == :batch
 
     @own_root_agent = nil
-    @first_to_shut_down = nil
+    @shutdown_watch = nil
     @label_routers = {}
   end
 
@@ -144,12 +144,22 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     super
     root_agent = root_agent_of(router)
     return if root_agent.nil?
-    first = nil
-    root_agent.lifecycle { |plugin, _kind| first = plugin; break }
-    return if first.nil?
+    watch = shutdown_watch(root_agent)
+    return if watch.nil?
     @label_routers = resolve_label_routers(root_agent)
-    @first_to_shut_down = first
+    @shutdown_watch = watch
     @own_root_agent = root_agent
+  end
+
+  # The plugin whose after_shutdown tells that the shutdown of this configuration has come to that step. Fluentd runs
+  # each step of the shutdown for all the plugins, in the order of RootAgent#lifecycle, where the inputs come first, so
+  # the last input runs after_shutdown before any other plugin does. Without an input, the first plugin of the
+  # lifecycle. The inputs are taken from the root agent, as RootAgent#lifecycle skips some of them while Fluentd starts
+  # the plugins after a zero-downtime restart.
+  def shutdown_watch(root_agent)
+    watch = root_agent.inputs.last
+    root_agent.lifecycle { |plugin, _kind| watch = plugin; break } if watch.nil?
+    watch
   end
 
   # The router of each label of the rules, looked up once in start in the configuration that this plugin belongs to, as
@@ -168,14 +178,15 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   end
 
   # Before start, with the test driver, whose router has no root agent, and once the shutdown of the configuration of
-  # this plugin has come to after_shutdown, the label is looked up for each call, as it was before it was kept. Fluentd
-  # runs each step of the shutdown for all the plugins, in the order of RootAgent#lifecycle, and EventEmitter drops the
-  # router of a plugin in after_shutdown, so the routers of this configuration may be dropped from then on, while the
-  # events still come here. A label that was not defined at start raises the error of the lookup in the configuration of
-  # this plugin, even when the new configuration defines it.
+  # this plugin has come to after_shutdown, the label is looked up for each call, as it was before it was kept.
+  # EventEmitter drops the router of a plugin in after_shutdown, so the routers of this configuration may be dropped
+  # from then on, while the events still come here. If the watched plugin raises in after_shutdown, its after_shutdown?
+  # stays false, and this plugin's own after_shutdown is the latest point. Until then, a label that was not defined at
+  # start raises the error of the lookup in the configuration of this plugin, even when the new configuration defines
+  # it.
   def get_router(tgt_label)
     return router if tgt_label.nil? || tgt_label.empty?
-    return event_emitter_router(tgt_label) if @own_root_agent.nil? || @first_to_shut_down.after_shutdown?
+    return event_emitter_router(tgt_label) if @own_root_agent.nil? || @shutdown_watch.after_shutdown? || after_shutdown?
     @label_routers[tgt_label] || @own_root_agent.find_label(tgt_label).event_router
   end
 
