@@ -208,7 +208,7 @@ Alternatively, put `record_modifier` or `record_transformer` in front of this pl
 
 A re-emitted event can come back to this plugin, for example with `tag new.${tag}` in `<match **>`, or with `label @ROOT` in a top-level `<match>`. An event that comes back `max_reemit_depth` times in a row (10 by default) is stopped with `ReemitLoopError`, instead of being re-emitted until Fluentd stops with `SystemStackError`:
 
-* With `<label @ERROR>`, the event is sent to `@ERROR`. If it comes back to this plugin from there, for example when this plugin is in `<label @ERROR>`, it is dropped, and the record is written to the error log.
+* With `<label @ERROR>`, the event is sent to `@ERROR`. If it comes back from there to this plugin, or to another section of this plugin that was stopped with it, for example when this plugin is in `<label @ERROR>`, it is dropped, and the record is written to the error log.
 * Without `<label @ERROR>`, the error goes back to the input, like other errors. It is raised once from the pass that started the loop, not at each level of the nested emits.
 
 A chain that ends, for example `remove_tag_regexp` with `tag ${tag}`, which removes one part of the tag on each pass, may need a larger `max_reemit_depth`. It can be 20 at most, because each pass uses the stack of the thread: with `out_copy` in the path, the stack ran out after 84 passes on Windows with Ruby 3.1.
@@ -217,6 +217,8 @@ The depth is counted:
 
 * for each `<match>` section (or `<store>` of `out_copy`), so a loop through two sections passes the events up to twice `max_reemit_depth`, and through three up to three times.
 * only while the emits are nested in one fiber. A loop through a buffered output, or through `out_forward` and `in_forward`, starts again at 0 on each pass, and is not stopped.
+
+With `out_copy` in a loop, each pass re-emits to each `<store>`, so the passes would grow as a tree until each path reaches `max_reemit_depth`. So once a loop is stopped, it is not started again from another `<store>`: until the loop is over, an event that comes back to a section of the loop is stopped at once too, in the same way. The sections of the loop are those in the nested emits when it was stopped, and those that re-emit an event to a stopped pass. Another section goes on as usual, such as a chain out of the loop, or this plugin in `<label @ERROR>`. With `out_copy`, a record that several passes stop is sent to `@ERROR` once. The loop is over when the nested emits are back at the first pass of each section that was stopped. The events are then sent to `@ERROR`, and the next events of that pass have their own loop. After that pass, the sections of the loop are stopped again until the outermost pass of this plugin ends, so that another `<store>` of an `out_copy` does not start the loop again. A loop without `out_copy` stops as described above, and the records and tags that are re-emitted after it have their own loop.
 
 An error that this plugin raises, such as for a label that is not defined, is not counted. Fluentd sends the events to `@ERROR`, as for other outputs that raise an error, so if `<label @ERROR>` sends them back to this plugin, for example with `relabel`, they loop until `SystemStackError`.
 
