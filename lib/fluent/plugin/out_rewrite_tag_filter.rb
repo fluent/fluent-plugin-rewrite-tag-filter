@@ -131,9 +131,9 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
     @batch_mode = @emit_mode == :batch
 
+    @own_root_agent = nil
+    @first_to_shut_down = nil
     @label_routers = {}
-    @label_lookup_errors = {}
-    resolve_label_routers
   end
 
   def multi_workers_ready?
@@ -142,68 +142,56 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
   def start
     super
-    # A label that was not found in configure is looked up again, in case it was added after this plugin.
-    @label_lookup_errors = {}
-    resolve_label_routers
+    root_agent = root_agent_of(router)
+    return if root_agent.nil?
+    first = nil
+    root_agent.lifecycle { |plugin, _kind| first = plugin; break }
+    return if first.nil?
+    @label_routers = resolve_label_routers(root_agent)
+    @first_to_shut_down = first
+    @own_root_agent = root_agent
   end
 
-  # The outputs of this configuration have flushed at shutdown. The events for the labels that still come, from a thread
-  # that outlives its plugin, go to the configuration that Fluentd runs, as before this plugin looked up the labels once.
-  def after_shutdown
-    @label_routers = {}
-    @label_lookup_errors = {}
-    super
-  end
-
-  # Looked up once, as @label is, so during a reload the events go to the labels of this configuration, whose outputs
-  # flush at shutdown, not to the new one, which may not be configured or started yet. The error of a label that is not
-  # defined is kept. @ERROR is set up after the other <label> sections, so it may be found only in start.
-  def resolve_label_routers
-    @rules.each do |rule|
-      label = rule.label
-      next if label.nil? || label.empty? || @label_routers.key?(label) || @label_lookup_errors.key?(label)
+  # The router of each label of the rules, looked up once in start in the configuration that this plugin belongs to, as
+  # Fluentd looks up @label once. Engine#reload_config makes the new configuration Fluent::Engine.root_agent before it
+  # configures it and stops the old one, so a lookup for each event would send the events of the old configuration to
+  # the new one, which is not started. A label that is not defined is not kept.
+  def resolve_label_routers(root_agent)
+    @rules.map(&:label).uniq.each_with_object({}) do |label, routers|
+      next if label.nil? || label.empty?
       begin
-        @label_routers[label] = get_router(label)
-      rescue ArgumentError => e
-        next if label == Fluent::RootAgent::ERROR_LABEL && !started?
-        @label_lookup_errors[label] = e
+        routers[label] = label == "@ROOT" ? root_agent.event_router : root_agent.find_label(label).event_router
+      rescue ArgumentError
+        # Raised again by get_router for each call.
       end
     end
   end
 
-  # The router of the label of a rule, found in configure or start. For a label that is not defined, the kept error is
-  # raised again as a new error, with the frames of the lookup in Fluentd and then the backtrace of this call, so that
-  # its location and the logs are as when the label is looked up here.
-  def resolved_router(label)
-    return router if label.nil? || label.empty?
-    labeled_router = @label_routers[label]
-    return labeled_router if labeled_router
-    if (kept = @label_lookup_errors[label])
-      lookup_frames = kept.backtrace.take_while { |line| !line.include?(__FILE__) }
-      raise kept.class, kept.message, lookup_frames + caller
-    end
-    # @ERROR in a <label> before start, and any label after shutdown.
-    get_router(label)
-  end
-
+  # Before start, with the test driver, whose router has no root agent, and once the shutdown of the configuration of
+  # this plugin has come to after_shutdown, the label is looked up for each call, as it was before it was kept. Fluentd
+  # runs each step of the shutdown for all the plugins, in the order of RootAgent#lifecycle, and EventEmitter drops the
+  # router of a plugin in after_shutdown, so the routers of this configuration may be dropped from then on, while the
+  # events still come here. A label that was not defined at start raises the error of the lookup in the configuration of
+  # this plugin, even when the new configuration defines it.
   def get_router(tgt_label)
-    label_router = if tgt_label.nil? || tgt_label.empty?
-        router
-    else
-        event_emitter_router(tgt_label)
-    end
-    #log.trace "Got router for #{tgt_label}: #{!label_router.nil?}"
-    return label_router
+    return router if tgt_label.nil? || tgt_label.empty?
+    return event_emitter_router(tgt_label) if @own_root_agent.nil? || @first_to_shut_down.after_shutdown?
+    @label_routers[tgt_label] || @own_root_agent.find_label(tgt_label).event_router
   end
 
-  # The root agent of the configuration that this plugin belongs to, to see whether it has <label @ERROR>.
-  # Fluent::Engine.root_agent is the newest one: a reload replaces it before the old plugins stop. The handler of the
-  # router is the root agent, or the label that this plugin is in, and the label knows its root agent. The router of
-  # the test driver has no handler.
-  def own_root_agent
-    handler = router.respond_to?(:emit_error_handler) ? router.emit_error_handler : nil
+  # The root agent that the handler of a router belongs to: the root agent itself, or the <label> section, which knows
+  # its root agent. The router of the test driver has no handler, and nil is returned.
+  def root_agent_of(event_router)
+    handler = event_router.respond_to?(:emit_error_handler) ? event_router.emit_error_handler : nil
     handler = handler.root_agent if handler.is_a?(Fluent::Label)
-    handler.is_a?(Fluent::RootAgent) ? handler : Fluent::Engine.root_agent
+    handler.is_a?(Fluent::RootAgent) ? handler : nil
+  end
+
+  # The root agent of the configuration that this plugin belongs to, to see whether it has <label @ERROR>. It is kept in
+  # start, as the router is dropped in after_shutdown. Fluent::Engine.root_agent is the newest one: a reload replaces it
+  # before the old plugins stop.
+  def own_root_agent
+    @own_root_agent || root_agent_of(router) || Fluent::Engine.root_agent
   end
 
   def process(tag, es)
@@ -369,7 +357,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       if !stop.nil?
         (stopped_es ||= Fluent::MultiEventStream.new).add(time, record)
       elsif new_event_streams.nil?
-        resolved_router(rewrited_label).emit(rewrited_tag, time, record)
+        get_router(rewrited_label).emit(rewrited_tag, time, record)
         after_reemit(state, own_scope) if state.scopes.last.stopped
       else
         new_event_streams[rewrited_label][rewrited_tag].add(time, record)
@@ -377,7 +365,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     end
     if !new_event_streams.nil?
       new_event_streams.each do |rewrited_label, label_event_streams |
-        labeled_router = resolved_router(rewrited_label)
+        labeled_router = get_router(rewrited_label)
         label_event_streams.each do |rewrited_tag, new_es|
             labeled_router.emit_stream(rewrited_tag, new_es)
             after_reemit(state, own_scope) if state.scopes.last.stopped

@@ -27,10 +27,66 @@ class RewriteTagFilterTestEmitInConfigureOutput < Fluent::Plugin::Output
 
   def configure(conf)
     super
-    self.class.router_to_emit&.emit("input", Fluent::EventTime.now, { "message" => "while configuring" })
+    router = self.class.router_to_emit
+    router.emit("input", Fluent::EventTime.now, { "message" => "while configuring" }) if router
   end
 
   def process(_tag, _es)
+  end
+end
+
+# An output that emits an event through a router once, in a step of the shutdown, as a thread of the old configuration
+# can do while Fluentd shuts it down in a reload: after before_shutdown, or before after_shutdown. The error of the emit
+# is kept.
+class RewriteTagFilterTestEmitInShutdownOutput < Fluent::Plugin::Output
+  Fluent::Plugin.register_output("rewrite_tag_filter_test_emit_in_shutdown", self)
+  config_param :step, :enum, list: [:before_shutdown, :after_shutdown], default: :after_shutdown
+
+  class << self
+    attr_accessor :router_to_emit, :error
+  end
+
+  def before_shutdown
+    super
+    emit_once if @step == :before_shutdown
+  end
+
+  def after_shutdown
+    emit_once if @step == :after_shutdown
+    super
+  end
+
+  def emit_once
+    router = self.class.router_to_emit
+    return unless router
+    self.class.router_to_emit = nil
+    begin
+      router.emit("input", Fluent::EventTime.now, { "message" => "in shutdown" })
+    rescue => e
+      self.class.error = e
+    end
+  end
+
+  def process(_tag, _es)
+  end
+end
+
+# A filter that passes the events.
+class RewriteTagFilterTestPassFilter < Fluent::Plugin::Filter
+  Fluent::Plugin.register_filter("rewrite_tag_filter_test_pass", self)
+
+  def filter(_tag, _time, record)
+    record
+  end
+end
+
+# An output with a buffer that keeps the events it writes.
+class RewriteTagFilterTestCollectBufferedOutput < Fluent::Plugin::Output
+  Fluent::Plugin.register_output("rewrite_tag_filter_test_collect_buffered", self)
+  config_param :name, :string
+
+  def write(chunk)
+    chunk.each { |_time, record| RewriteTagFilterTestCollectOutput.events << [@name, chunk.metadata.tag, record] }
   end
 end
 
@@ -50,6 +106,8 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
   def setup
     Fluent::Test.setup
     RewriteTagFilterTestEmitInConfigureOutput.router_to_emit = nil
+    RewriteTagFilterTestEmitInShutdownOutput.router_to_emit = nil
+    RewriteTagFilterTestEmitInShutdownOutput.error = nil
   end
 
   def rule_conf(tag:, key: "message", pattern: "/^(a)(b)$/", label: nil, invert: false, head: "")
@@ -668,9 +726,11 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
         ]
       time = event_time
       d = create_driver(conf)
-      # Router only called for default label. The routers of the labels are found in configure, not for each record.
+      # Router only called for default label
       mock.proxy(d.instance.router).emit(anything, anything, anything).times(2)
-      dont_allow(d.instance).get_router.with_any_args
+      mock.proxy(d.instance).get_router("odd_label").times(2)
+      mock.proxy(d.instance).get_router("even_label").times(2)
+      mock.proxy(d.instance).get_router(nil).times(2)
       mock.proxy(d.instance.router).emit_stream(anything, anything).times(0)
       d.run(default_tag: "input") do
         d.feed([[time, { "key" => "odd", "message" => "message-1" }],
@@ -1650,7 +1710,12 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
 
   # These tests let Fluentd route the events with the configuration, as it does when it runs.
   sub_test_case "the router of a label" do
+    setup do
+      @started = []
+    end
+
     teardown do
+      @started.each(&:shutdown)
       Fluent::Engine.init(Fluent::SystemConfig.new)
     end
 
@@ -1658,6 +1723,13 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
 
     def configure_fluentd(conf)
       Fluent::Engine.run_configure(Fluent::Config.parse(conf, "(test)", "(test_dir)", syntax: :v1))
+      Fluent::Engine.root_agent
+    end
+
+    def start_fluentd(root_agent = Fluent::Engine.root_agent)
+      root_agent.start
+      @started << root_agent
+      root_agent
     end
 
     # Engine#reload_config replaces Fluent::Engine.root_agent and configures the new configuration before it stops the
@@ -1665,8 +1737,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     # rewrite_tag_filter_test_emit_in_configure in the new configuration emits through the old one. The old root agent is
     # returned.
     def reload(old_conf, new_conf)
-      configure_fluentd(old_conf)
-      old_root_agent = Fluent::Engine.root_agent
+      old_root_agent = start_fluentd(configure_fluentd(old_conf))
       RewriteTagFilterTestEmitInConfigureOutput.router_to_emit = old_root_agent.event_router
       RewriteTagFilterTestCollectOutput.events.clear
       Fluent::Engine.init(Fluent::SystemConfig.new)
@@ -1674,10 +1745,10 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       old_root_agent
     end
 
-    # The labels that the plugin looks up from now on.
+    # The labels that the plugin looks up in Fluentd from now on.
     def count_lookups(plugin)
       lookups = []
-      plugin.define_singleton_method(:get_router) do |label|
+      plugin.define_singleton_method(:event_emitter_router) do |label|
         lookups << label
         super(label)
       end
@@ -1711,11 +1782,16 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     end
 
     data(EMIT_MODES)
-    test "is looked up in configure, not for each event stream" do |mode|
-      configure_fluentd(label_conf("out", mode: mode))
-      root_agent = Fluent::Engine.root_agent
+    test "is looked up when the plugin starts, not for each event stream" do |mode|
+      root_agent = configure_fluentd(label_conf("out", mode: mode))
       lookups = count_lookups(root_agent.outputs.first)
-      assert_equal([["out", "new.input", { "message" => "a" }]], emit_one(root_agent.event_router))
+      expected = [["out", "new.input", { "message" => "a" }]]
+      # Before the plugin starts, the label is looked up when its events come.
+      assert_equal(expected, emit_one(root_agent.event_router))
+      assert_equal(["@OUT"], lookups)
+      start_fluentd
+      lookups.clear
+      assert_equal(expected, emit_one(root_agent.event_router))
       assert_equal([], lookups)
     end
 
@@ -1764,6 +1840,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
           </match>
         </label>
       ] }.join)
+      start_fluentd
       RewriteTagFilterTestCollectOutput.events.clear
       Fluent::Engine.root_agent.event_router.emit_array("input", %w[a b c b a].map { |m| [event_time, { "message" => m }] })
       events = RewriteTagFilterTestCollectOutput.events
@@ -1773,57 +1850,27 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     end
 
     data(EMIT_MODES)
-    test "a label that is not defined raises the error with the backtrace of the emit" do |mode|
+    test "a label that is not defined raises the error of the lookup in Fluentd" do |mode|
       conf = %[
         <match input>
           @type rewrite_tag_filter
           #{rule_conf(pattern: "/.+/", tag: "new.${tag}", label: "@UNDEFINED", head: "emit_mode #{mode}")}
         </match>
       ]
-      configure_fluentd(conf)
+      start_fluentd(configure_fluentd(conf))
       lookups = count_lookups(Fluent::Engine.root_agent.outputs.first)
-      errors = 2.times.map do
-        assert_raise(ArgumentError) { emit_one(Fluent::Engine.root_agent.event_router) }
-      end
-      assert_equal(["@UNDEFINED label not found"] * 2, errors.map(&:message))
-      assert_false(errors[0].equal?(errors[1]))
-      # The location is the lookup in Fluentd, as when the label is looked up for the event, and then comes the emit.
-      assert_match(/root_agent\.rb:\d+:in .*find_label/, errors[0].backtrace.first)
-      assert_true(errors[0].backtrace.any? { |line| line.include?("rewrite_and_emit") }, errors[0].backtrace.inspect)
-      assert_true(errors[0].backtrace.none? { |line| line.include?("resolve_label_routers") }, errors[0].backtrace.inspect)
+      error = assert_raise(ArgumentError) { emit_one(Fluent::Engine.root_agent.event_router) }
+      assert_equal("@UNDEFINED label not found", error.message)
+      assert_not_nil(error.backtrace_locations)
+      assert_match(/root_agent\.rb:\d+:in .*find_label/, error.backtrace[0])
+      assert_match(/out_rewrite_tag_filter\.rb:\d+:in .*get_router/, error.backtrace[1])
+      assert_true(error.backtrace.any? { |line| line.include?("rewrite_and_emit") }, error.backtrace.inspect)
       assert_equal([], lookups)
     end
 
-    test "a label that is not found in configure is looked up again when the plugin starts" do
-      configure_fluentd(label_conf("late", out: false))
-      root_agent = Fluent::Engine.root_agent
-      root_agent.add_label("@OUT").configure(Fluent::Config.parse(%[
-        <match **>
-          @type rewrite_tag_filter_test_collect
-          name late
-        </match>
-      ], "(test)", "(test_dir)", syntax: :v1))
-      root_agent.start
-      begin
-        assert_equal([["late", "new.input", { "message" => "a" }]], emit_one(root_agent.event_router))
-      ensure
-        root_agent.shutdown
-      end
-    end
-
-    # The outputs of the old configuration do not flush after they are shut down. With supervisor: true, reload_config
-    # configures the new configuration and shuts the old one down, but does not start the new one.
-    test "after the configuration of this plugin is shut down, the events go to the configuration that Fluentd runs" do
-      configure_fluentd(label_conf("old"))
-      old_root_agent = Fluent::Engine.root_agent
-      old_root_agent.start
-      Fluent::Engine.reload_config(Fluent::Config.parse(label_conf("new"), "(test)", "(test_dir)", syntax: :v1), supervisor: true)
-      assert_equal([["new", "new.input", { "message" => "a" }]], emit_one(old_root_agent.event_router))
-    end
-
     # @ERROR is set up after the other <label> sections are configured.
-    test "label @ERROR in a <label> is looked up when the plugin starts" do
-      configure_fluentd(%[
+    test "label @ERROR in a <label> is found when the plugin starts" do
+      root_agent = configure_fluentd(%[
         <label @APP>
           <match input>
             @type rewrite_tag_filter
@@ -1831,21 +1878,194 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
           </match>
         </label>
       ] + ERROR_LABEL_CONF)
-      root_agent = Fluent::Engine.root_agent
       app = root_agent.find_label("@APP")
       lookups = count_lookups(app.outputs.first)
-      expected = [["error", "new.input", { "message" => "a" }]]
-      # Before the plugin starts, the label is looked up when its events come.
-      assert_equal(expected, emit_one(app.event_router))
-      assert_equal(["@ERROR"], lookups)
-      root_agent.start
-      begin
-        lookups.clear
-        assert_equal(expected, emit_one(app.event_router))
-        assert_equal([], lookups)
-      ensure
-        root_agent.shutdown
+      start_fluentd
+      assert_equal([["error", "new.input", { "message" => "a" }]], emit_one(app.event_router))
+      assert_equal([], lookups)
+    end
+
+    # rewrite_tag_filter in <label @B> sends to target. The shutdown goes through the outputs with a router of label
+    # @ROOT, then the labels in the order they are defined. In the old configuration, the hook in <label @A> emits into
+    # @B after the outputs with a router of label @ROOT and of @A ran after_shutdown, which drops their router, and
+    # before rewrite_tag_filter in @B did.
+    def shut_down_target_conf(target, mode, name)
+      collect = "<match **>\n@type rewrite_tag_filter_test_collect\nname #{name}\n</match>"
+      relabel = "<match r.**>\n@type relabel\n@label @C\n</match>"
+      root, a, label = {
+        "label @ROOT" => [relabel, "", "@ROOT"],
+        "a label defined before" => ["", relabel, "@A"],
+        "a label defined before, to a rule without a label" =>
+          ["", "<match r.**>\n@type rewrite_tag_filter\n#{rule_conf(pattern: "/.+/", tag: "c.${tag}")}\n</match>\n" +
+            collect.sub("**", "c.**"), "@A"],
+      }.fetch(target)
+      Fluent::Config.parse(%[
+        #{root}
+        <label @A>
+          #{a}
+          <match never>
+            @type rewrite_tag_filter_test_emit_in_shutdown
+          </match>
+        </label>
+        <label @B>
+          <match **>
+            @type rewrite_tag_filter
+            emit_mode #{mode}
+            #{rule_conf(pattern: "/.+/", tag: "r.${tag}", label: label)}
+          </match>
+        </label>
+        <label @C>
+          #{collect}
+        </label>
+      ], "(test)", "(test_dir)", syntax: :v1)
+    end
+
+    data("label @ROOT, batch" => ["label @ROOT", "batch"],
+         "label @ROOT, record" => ["label @ROOT", "record"],
+         "a label defined before, batch" => ["a label defined before", "batch"],
+         "a label defined before, record" => ["a label defined before", "record"],
+         "a rule without a label there, batch" => ["a label defined before, to a rule without a label", "batch"],
+         "a rule without a label there, record" => ["a label defined before, to a rule without a label", "record"])
+    test "during a reload, a label that is shut down before this plugin is looked up again" do |(target, mode)|
+      Fluent::Engine.run_configure(shut_down_target_conf(target, mode, "old"))
+      old_root_agent = start_fluentd
+      RewriteTagFilterTestEmitInShutdownOutput.router_to_emit = old_root_agent.find_label("@B").event_router
+      RewriteTagFilterTestCollectOutput.events.clear
+      # With supervisor: true, reload_config configures the new configuration and shuts the old one down, but does not
+      # start the new one.
+      Fluent::Engine.reload_config(shut_down_target_conf(target, mode, "new"), supervisor: true)
+      assert_nil(RewriteTagFilterTestEmitInShutdownOutput.error)
+      tag = target.end_with?("without a label") ? "c.r.input" : "r.input"
+      assert_equal([["new", tag, { "message" => "in shutdown" }]], RewriteTagFilterTestCollectOutput.events)
+    end
+
+    # The outputs without a router at the top level are shut down after the labels, and flush then. relabel at the top
+    # level is shut down before the labels.
+    data(EMIT_MODES)
+    test "during a reload, the events go to label @ROOT until its outputs are shut down" do |mode|
+      conf = lambda do |name|
+        Fluent::Config.parse(%[
+          <match r.**>
+            @type rewrite_tag_filter_test_collect_buffered
+            name #{name}
+            <buffer tag>
+              @type memory
+              flush_at_shutdown true
+            </buffer>
+          </match>
+          <match never>
+            @type relabel
+            @label @A
+          </match>
+          <label @A>
+            <match never>
+              @type rewrite_tag_filter_test_emit_in_shutdown
+              step before_shutdown
+            </match>
+          </label>
+          <label @B>
+            <match **>
+              @type rewrite_tag_filter
+              emit_mode #{mode}
+              #{rule_conf(pattern: "/.+/", tag: "r.${tag}", label: "@ROOT")}
+            </match>
+          </label>
+        ], "(test)", "(test_dir)", syntax: :v1)
       end
+      Fluent::Engine.run_configure(conf.call("old"))
+      old_root_agent = start_fluentd
+      RewriteTagFilterTestEmitInShutdownOutput.router_to_emit = old_root_agent.find_label("@B").event_router
+      RewriteTagFilterTestCollectOutput.events.clear
+      Fluent::Engine.reload_config(conf.call("new"), supervisor: true)
+      assert_nil(RewriteTagFilterTestEmitInShutdownOutput.error)
+      assert_equal([["old", "r.input", { "message" => "in shutdown" }]], RewriteTagFilterTestCollectOutput.events)
+    end
+
+    # In a <label>, the filters run after_shutdown before the outputs without a router.
+    test "during a reload, a label is looked up again once a filter before it is shut down" do
+      conf = lambda do |name|
+        Fluent::Config.parse(%[
+          <label @A>
+            <filter **>
+              @type rewrite_tag_filter_test_pass
+            </filter>
+            <match never>
+              @type rewrite_tag_filter_test_emit_in_shutdown
+            </match>
+            <match **>
+              @type rewrite_tag_filter_test_collect
+              name #{name}
+            </match>
+          </label>
+          <label @B>
+            <match **>
+              @type rewrite_tag_filter
+              #{rule_conf(pattern: "/.+/", tag: "r.${tag}", label: "@A")}
+            </match>
+          </label>
+        ], "(test)", "(test_dir)", syntax: :v1)
+      end
+      Fluent::Engine.run_configure(conf.call("old"))
+      old_root_agent = start_fluentd
+      RewriteTagFilterTestEmitInShutdownOutput.router_to_emit = old_root_agent.find_label("@B").event_router
+      RewriteTagFilterTestCollectOutput.events.clear
+      Fluent::Engine.reload_config(conf.call("new"), supervisor: true)
+      assert_nil(RewriteTagFilterTestEmitInShutdownOutput.error)
+      assert_equal([["new", "r.input", { "message" => "in shutdown" }]], RewriteTagFilterTestCollectOutput.events)
+    end
+
+    # <label @B> only sends to @C, which is defined first, so @C drops its router before @B is shut down.
+    data(EMIT_MODES)
+    test "during a reload, a label that sends to a label shut down before it is looked up again" do |mode|
+      conf = lambda do |name|
+        Fluent::Config.parse(%[
+          <label @C>
+            <match r.**>
+              @type rewrite_tag_filter
+              #{rule_conf(pattern: "/.+/", tag: "c.${tag}")}
+            </match>
+            <match c.**>
+              @type rewrite_tag_filter_test_collect
+              name #{name}
+            </match>
+          </label>
+          <label @A>
+            <match never>
+              @type rewrite_tag_filter_test_emit_in_shutdown
+            </match>
+          </label>
+          <label @B>
+            <match **>
+              @type relabel
+              @label @C
+            </match>
+          </label>
+          <label @D>
+            <match **>
+              @type rewrite_tag_filter
+              emit_mode #{mode}
+              #{rule_conf(pattern: "/.+/", tag: "r.${tag}", label: "@B")}
+            </match>
+          </label>
+        ], "(test)", "(test_dir)", syntax: :v1)
+      end
+      Fluent::Engine.run_configure(conf.call("old"))
+      old_root_agent = start_fluentd
+      RewriteTagFilterTestEmitInShutdownOutput.router_to_emit = old_root_agent.find_label("@D").event_router
+      RewriteTagFilterTestCollectOutput.events.clear
+      Fluent::Engine.reload_config(conf.call("new"), supervisor: true)
+      assert_nil(RewriteTagFilterTestEmitInShutdownOutput.error)
+      assert_equal([["new", "c.r.input", { "message" => "in shutdown" }]], RewriteTagFilterTestCollectOutput.events)
+    end
+
+    test "after the configuration of this plugin is shut down, the events go to the configuration that Fluentd runs" do
+      old_root_agent = start_fluentd(configure_fluentd(label_conf("old")))
+      lookups = count_lookups(old_root_agent.outputs.first)
+      Fluent::Engine.reload_config(Fluent::Config.parse(label_conf("new"), "(test)", "(test_dir)", syntax: :v1), supervisor: true)
+      2.times do
+        assert_equal([["new", "new.input", { "message" => "a" }]], emit_one(old_root_agent.event_router))
+      end
+      assert_equal(["@OUT", "@OUT"], lookups)
     end
   end
 end
