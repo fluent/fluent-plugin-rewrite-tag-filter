@@ -39,10 +39,36 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   # Windows with Ruby 3.1, and after 157 or more on macOS and Linux. The depth is counted for each <match>, so a loop
   # through three <match> sections passes the events three times the depth. 20 keeps such a loop at 60 passes.
   MAX_REEMIT_DEPTH_LIMIT = 20
-  # One key for all the instances: a Symbol made per instance would stay in memory after a reload.
-  REEMIT_DEPTH_KEY = :rewrite_tag_filter_reemit_depth
-  # The error of a loop without <label @ERROR>, kept until the depth goes back to 0.
-  REEMIT_ERROR_KEY = :rewrite_tag_filter_reemit_error
+  # The passes of this plugin nested in the current fiber, for all the instances under one key: a Symbol made per
+  # instance would stay in memory after a reload. Nothing about an instance is kept after its outermost pass.
+  REEMIT_STATE_KEY = :rewrite_tag_filter_reemit
+
+  # depths: the depth of each instance. errors: the error of a loop without <label @ERROR>, kept until the depth of the
+  # instance goes back to 0. scopes: see ReemitScope.
+  class ReemitState
+    attr_reader :depths, :errors, :scopes
+
+    def initialize
+      @depths = {}
+      @errors = {}
+      @scopes = [ReemitScope.new(nil, nil, nil, [], [], {}.compare_by_identity, [].freeze)]
+    end
+  end
+
+  # With out_copy in a loop, each pass re-emits to each <store>, and the passes would grow as a tree until each path
+  # reaches the depth. So once a loop is stopped, every pass of the loop is stopped too: a pass of a section that was in
+  # the nested emits when it was stopped, or of a section whose pass re-emitted to a stopped pass. A pass of another
+  # section goes on as usual, such as a chain out of the loop, or a rewrite_tag_filter in <label @ERROR>.
+  # When a pass returns from an emit, and each section stopped in this loop is back at its outermost pass, or out of
+  # the nested emits, the loop is over: its events are sent to @ERROR, in a new scope where an event that comes back
+  # to a section stopped in the loop is dropped, and the next emits of this pass have a new scope, so that they have
+  # their own loop. After this pass, the loop is stopped again until the outermost pass returns, so that another
+  # <store> of an out_copy does not start it again.
+  # stopped: the error of the stopped loop, if any. other_error: the error of the passes stopped with it. to_error:
+  # whether the events go to @ERROR. loop_instances, stopped_instances: the sections of the loop, and those stopped.
+  # pending: the events to send to @ERROR, once for each record, which out_copy shares between the <store>.
+  # came_back: the sections stopped before the events were sent to @ERROR.
+  ReemitScope = Struct.new(:stopped, :other_error, :to_error, :loop_instances, :stopped_instances, :pending, :came_back)
 
   class ReemitLoopError < StandardError; end
 
@@ -121,44 +147,108 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   end
 
   def process(tag, es)
-    # The depth of each instance, for the current fiber. An instance is removed when its depth goes back to 0.
-    depths = (Thread.current[REEMIT_DEPTH_KEY] ||= {})
+    state = (Thread.current[REEMIT_STATE_KEY] ||= ReemitState.new)
+    scopes = state.scopes
+    own_scope = scopes.size
+    scope = scopes.last
+    depths = state.depths
     depth = depths[object_id] || 0
     depths[object_id] = depth + 1
     loop_error = nil
     begin
-      if depth < @max_reemit_depth
-        rewrite_and_emit(tag, es)
-      elsif depth == @max_reemit_depth
-        error = ReemitLoopError.new("events came back to this plugin #{depth} times in a row. Check the tag and the label of the rules, or max_reemit_depth")
-        if own_root_agent&.error_collector
-          # Send them to @ERROR here instead of raising the error, so the events that come back from @ERROR are still
-          # counted at this depth.
-          es.each { |time, record| router.emit_error_event(tag, time, record, error) }
-        else
-          # Without <label @ERROR>, the error is raised like other errors, so that the input sees it. Raised here, it would
-          # be logged at each level of the nested emits, so it is kept and raised once, at depth 0.
-          (Thread.current[REEMIT_ERROR_KEY] ||= {})[object_id] ||= error
-        end
-      else
-        # The error events came back too, for example when this plugin is in <label @ERROR>. Sending them to @ERROR
+      if scope.came_back.include?(object_id)
+        # The events sent to @ERROR came back, for example when this plugin is in <label @ERROR>. Sending them to @ERROR
         # again would loop forever, so drop them, and keep the records in the log.
         es.each do |time, record|
           log.error "rewrite_tag_filter: an event sent to @ERROR came back to this plugin, so it is dropped. Check the tag and the label of the rules", tag: tag, time: time, record: record
         end
+      elsif depth == @max_reemit_depth || (scope.stopped && scope.loop_instances.include?(object_id))
+        stop_loop(tag, es, state, scope, depth)
+      else
+        rewrite_and_emit(tag, es, state, own_scope)
       end
     ensure
       if depth.zero?
         depths.delete(object_id)
-        loop_error = Thread.current[REEMIT_ERROR_KEY]&.delete(object_id)
+        loop_error = state.errors.delete(object_id) unless state.errors.empty?
       else
         depths[object_id] = depth
+      end
+      # After an error too, so that the next emit starts without the stop.
+      begin
+        while scopes.size > own_scope
+          begin
+            end_stopped_loop(state, scopes.last) if scopes.last.stopped
+          ensure
+            scopes.pop
+          end
+        end
+      ensure
+        end_stopped_loop(state, scope) if scope.stopped && depths.empty?
       end
     end
     raise loop_error if loop_error
   end
 
-  def rewrite_and_emit(tag, es)
+  def stop_loop(tag, es, state, scope, depth)
+    if depth == @max_reemit_depth
+      error = ReemitLoopError.new("events came back to this plugin #{depth} times in a row. Check the tag and the label of the rules, or max_reemit_depth")
+      unless scope.stopped
+        scope.stopped = error
+        scope.to_error = !own_root_agent&.error_collector.nil?
+      end
+      # Without <label @ERROR>, the error is raised like other errors, so that the input sees it. Raised here, it would
+      # be logged at each level of the nested emits, so it is kept and raised once, at depth 0 of this section.
+      state.errors[object_id] ||= error unless scope.to_error
+    else
+      error = (scope.other_error ||= ReemitLoopError.new("events came back to this plugin in a loop that was stopped at max_reemit_depth in the same emit. Check the tag and the label of the rules, or max_reemit_depth"))
+    end
+    scope.stopped_instances << object_id unless scope.stopped_instances.include?(object_id)
+    # The sections in the nested emits led the events back to the loop.
+    loop_instances = scope.loop_instances
+    state.depths.each_key { |instance| loop_instances << instance unless loop_instances.include?(instance) }
+    if scope.to_error
+      pending = scope.pending
+      es.each { |time, record| pending[record] ||= [router, tag, time, error] }
+    end
+  end
+
+  # Sends the events of the stopped loop to @ERROR. Unless keep_stopped, the next events are re-emitted as usual.
+  def end_stopped_loop(state, scope, keep_stopped: false)
+    pending = scope.pending
+    came_back = scope.came_back | scope.stopped_instances
+    unless keep_stopped
+      scope.stopped = scope.other_error = scope.to_error = nil
+      scope.loop_instances = []
+      scope.stopped_instances = []
+    end
+    scope.pending = {}.compare_by_identity
+    return if pending.empty?
+    error_scope = ReemitScope.new(nil, nil, nil, [], [], {}.compare_by_identity, came_back)
+    state.scopes.push(error_scope)
+    begin
+      pending.each { |record, (event_router, tag, time, error)| event_router.emit_error_event(tag, time, record, error) }
+      end_stopped_loop(state, error_scope) if error_scope.stopped
+    ensure
+      state.scopes.pop
+    end
+  end
+
+  # Called after this pass re-emits while a loop is stopped.
+  def after_reemit(state, own_scope)
+    scopes = state.scopes
+    scope = scopes.last
+    depths = state.depths
+    return unless scope.stopped_instances.all? { |instance| (depths[instance] || 0) <= 1 }
+    if scopes.size > own_scope
+      end_stopped_loop(state, scope)
+    else
+      end_stopped_loop(state, scope, keep_stopped: true)
+      scopes.push(ReemitScope.new(nil, nil, nil, [], [], {}.compare_by_identity, scope.came_back))
+    end
+  end
+
+  def rewrite_and_emit(tag, es, state, own_scope)
     placeholder = get_placeholder(tag)
     new_event_streams =  Hash.new {|hh, kk| hh[kk] = Hash.new {|h, k| h[k] = Fluent::MultiEventStream.new }}if @batch_mode
 
@@ -170,6 +260,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       end
       if new_event_streams.nil?
         get_router(rewrited_label).emit(rewrited_tag, time, record)
+        after_reemit(state, own_scope) if state.scopes.last.stopped
       else
         new_event_streams[rewrited_label][rewrited_tag].add(time, record)
       end
@@ -179,6 +270,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
         labeled_router = get_router(rewrited_label)
         label_event_streams.each do |rewrited_tag, new_es|
             labeled_router.emit_stream(rewrited_tag, new_es)
+            after_reemit(state, own_scope) if state.scopes.last.stopped
         end
       end
     end
