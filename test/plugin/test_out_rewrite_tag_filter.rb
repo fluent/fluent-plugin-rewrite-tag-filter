@@ -216,6 +216,15 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       test "a range in both forms stops the startup as before" do
         assert_raise(Fluent::ConfigError) { create_driver(rule_conf(tag: "t.${tag_parts[0..1]}.__TAG_PARTS[0..1]__")) }
       end
+
+      test "text that a token takes is not a range" do
+        # __X__ is a token, so TAG_PARTS[0..1]__ stays in the tag as written.
+        assert_not_broken { create_driver(rule_conf(tag: "b.__X__TAG_PARTS[0..1]__")) }
+      end
+
+      test "a range is reported with the key and the tag" do
+        assert_broken(/does not support range specify\. The next major version will stop the startup with this setting key="message" tag="t\.\$\{tag_parts\[0\.\.1\]\}"$/) { create_driver(rule_conf(tag: "t.${tag_parts[0..1]}")) }
+      end
     end
 
     sub_test_case "settings that may not do what the user meant are warned" do

@@ -267,8 +267,11 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     if rule.tag =~ /\$\{tag_parts\[\d\.\.\.?\d\]\}/ && rule.tag =~ /__TAG_PARTS\[\d\.\.\.?\d\]__/
       raise Fluent::ConfigError, "${tag_parts[n]} and __TAG_PARTS[n]__ placeholder does not support range specify at #{rule}"
     end
-    if rule.tag =~ TAG_PARTS_RANGE_REGEXP
-      report_broken_setting "${tag_parts[n]} and __TAG_PARTS[n]__ placeholder does not support range specify at #{rule}"
+    # The tokens are replaced with a character that cannot be in a placeholder, so the text around them does not join
+    # into a new one, and text that a token takes is not checked as a range.
+    masked_tag = rule.tag.gsub(TAG_TOKEN_REGEXP, "\0")
+    if masked_tag =~ TAG_PARTS_RANGE_REGEXP
+      report_broken_setting "${tag_parts[n]} and __TAG_PARTS[n]__ placeholder does not support range specify", key: rule.key, tag: rule.tag
     end
 
     if rule.tag.empty?
@@ -290,9 +293,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
         log.warn "rewrite_tag_filter: unknown placeholder #{placeholder} expands to an empty string", key: rule.key, tag: rule.tag
       end
     end
-    # A range is reported above, so it is not reported again here. The tokens are replaced with a character that cannot
-    # be in a placeholder, so the text around them does not join into a new one.
-    rule.tag.gsub(TAG_TOKEN_REGEXP, "\0").gsub(TAG_PARTS_RANGE_REGEXP, "\0").scan(PLACEHOLDER_LIKE_REGEXP) do |text|
+    # A range is reported above, so it is not reported again here.
+    masked_tag.gsub(TAG_PARTS_RANGE_REGEXP, "\0").scan(PLACEHOLDER_LIKE_REGEXP) do |text|
       log.warn "rewrite_tag_filter: #{text} is not a supported placeholder and stays in the tag as written", key: rule.key, tag: rule.tag
     end
   end
@@ -308,7 +310,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
   # A config that has kept Fluentd running must not stop the startup after a minor update,
   # so a certainly broken setting is only warned for now. The next major version will raise Fluent::ConfigError here.
-  def report_broken_setting(message)
-    log.warn "rewrite_tag_filter: #{message}. The next major version will stop the startup with this setting"
+  # fields are logged after the message, like the other warnings.
+  def report_broken_setting(message, **fields)
+    log.warn "rewrite_tag_filter: #{message}. The next major version will stop the startup with this setting", fields
   end
 end
