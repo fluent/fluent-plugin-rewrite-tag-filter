@@ -37,7 +37,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   KNOWN_PLACEHOLDER_REGEXP = /\A(?:\${tag}|__TAG__|\${hostname}|__HOSTNAME__|\${tag_parts\[(?:0|[1-9][0-9]*)\]}|__TAG_PARTS\[(?:0|[1-9][0-9]*)\]__)\z/
   # Text that looks like a placeholder but is not tokenized, so it stays in the tag as written: ${...}, or a placeholder
   # name between double underscores in another case. Other text between double underscores is a plain tag.
-  PLACEHOLDER_LIKE_REGEXP = /\${[^}]*}|__(?:tag|hostname|tag_parts\[[^\]]*\])__/i
+  PLACEHOLDER_LIKE_REGEXP = /\${[^}\0]*}|__(?:tag|hostname|tag_parts\[[^\]\0]*\])__/i
   TAG_PARTS_RANGE_REGEXP = /\${tag_parts\[[0-9]+\.\.\.?[0-9]+\]}|__TAG_PARTS\[[0-9]+\.\.\.?[0-9]+\]__/
 
   def configure(conf)
@@ -271,7 +271,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       report_broken_setting "${tag_parts[n]} and __TAG_PARTS[n]__ placeholder does not support range specify at #{rule}"
     end
 
-    if rule.tag.strip.empty?
+    if rule.tag.empty?
       log.warn "rewrite_tag_filter: the rule rewrites the tag to an empty string", key: rule.key
     end
 

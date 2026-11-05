@@ -230,6 +230,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
         "$01"                       => ["t.$01",               "$01 is not a backreference to a capture group, so it expands to an empty string"],
         "$3 with two groups"        => ["t.$3",                "the pattern has 2 capture group(s), so $3 expands to an empty string"],
         "empty tag"                 => ['""',                  "the rule rewrites the tag to an empty string"],
+        "__tag__ before a placeholder" => ["${__tag__${tag}",  "__tag__ is not a supported placeholder and stays in the tag as written"],
       )
       test "tag" do |(tag, message)|
         assert_warned(create_driver(rule_conf(tag: tag)), message)
@@ -260,6 +261,10 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
         "alternation"           => ["t.$1$2", "/^(?:(a)|(b))$/"],
         "double underscores"    => ["app__web__log.$1", "/^(a)(b)$/"],
         "text around a token"   => ["t.__hostname_${tag}__.$$1{a}", "/^(a)(b)$/"],
+        "backreference in ${...}" => ["t.${foo$1}", "/^(a)(b)$/"],
+        "placeholder in ${...}"   => ["${${tag}}", "/^(a)(b)$/"],
+        "backreference in __TAG_PARTS[...]__" => ["__TAG_PARTS[$1]__", "/^(a)(b)$/"],
+        "__tag before __TAG__"  => ["__tag__TAG__", "/^(a)(b)$/"],
       )
       test "no warning for a valid rule" do |(tag, pattern)|
         d = create_driver(rule_conf(tag: tag, pattern: pattern, head: "hostname_command echo host"))

@@ -219,7 +219,7 @@ The rules are checked at startup. A setting that may not do what you meant is re
 
 The following settings are certainly broken. They are reported with a warning for now, and the next major version will stop the startup with a configuration error:
 
-- A range in `${tag_parts[n]}` or `__TAG_PARTS[n]__`, such as `${tag_parts[0..2]}`. A tag that has a range in both forms, such as `t.${tag_parts[0..1]}.__TAG_PARTS[0..1]__`, already stops the startup, as in the earlier versions.
+- A range in `${tag_parts[n]}` or `__TAG_PARTS[n]__`, such as `${tag_parts[0..2]}`. A tag that has a range with one-digit numbers in both forms, such as `t.${tag_parts[0..1]}.__TAG_PARTS[0..1]__`, already stops the startup, as in the earlier versions.
 
 ### Nested attributes
 
