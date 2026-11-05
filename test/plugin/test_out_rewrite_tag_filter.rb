@@ -578,6 +578,29 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal "com.example", events[0][0]
     end
 
+    # An event whose tag is not changed would come back to the same <match>, so it is not re-emitted, and the later
+    # rules are not tried. With a label, it goes to the label (see "relabel").
+    data(EMIT_MODES)
+    test "an event whose tag is not changed is not re-emitted without a label" do |mode|
+      conf = rule_conf(pattern: "/^(.+)$/", tag: "${tag}", head: "emit_mode #{mode}\n@log_level trace") +
+             rule_conf(pattern: "/^(a|b)$/", tag: "other")
+      d = create_driver(conf)
+      d.run(default_tag: "input") do
+        d.feed({ "message" => "a" })
+        d.feed({ "message" => "b" })
+      end
+      assert_equal([], d.events)
+      assert_equal(2, d.logs.grep(/tag has not been rewritten/).size)
+    end
+
+    data(EMIT_MODES)
+    test "an event whose tag is not changed after remove_tag_prefix is not re-emitted" do |mode|
+      conf = rule_conf(pattern: "/^(.+)$/", tag: "${tag}", head: "emit_mode #{mode}\nremove_tag_prefix other")
+      d = create_driver(conf)
+      d.run(default_tag: "input") { d.feed({ "message" => "a" }) }
+      assert_equal([], d.events)
+    end
+
     test "get_router" do
       conf = %[
         <rule>
