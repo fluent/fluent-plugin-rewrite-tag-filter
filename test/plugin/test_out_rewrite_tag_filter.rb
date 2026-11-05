@@ -771,4 +771,131 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_raise(TypeError) { d.run(default_tag: "input") { d.feed("input", es) } }
     end
   end
+
+  # in_tail without `encoding` gives ASCII-8BIT strings.
+  sub_test_case "ASCII-8BIT value" do
+    def run_rules(rules, records, head: "", tag: "input")
+      d = create_driver("#{head}\n#{rules}")
+      d.run(default_tag: tag) { records.each { |r| d.feed(r) } }
+      d
+    end
+
+    data(
+      "normal rule" => [false, ["jp.hit"]],
+      "invert rule" => [true,  ["jp.hit", "jp.hit"]],
+    )
+    test "against a pattern with non-ASCII characters" do |(invert, expected)|
+      records = [{ "message" => "ok" }, { "message" => "エラー発生".b }, { "message" => "その他のエラー".b }]
+      d = run_rules(rule_conf(pattern: "/^エラー/", tag: "jp.hit", invert: invert), records)
+      assert_equal(expected, d.events.map(&:first))
+      assert_equal([], d.error_events)
+    end
+
+    test "against an ASCII-only pattern in UTF-8" do
+      d = run_rules(rule_conf(pattern: "/^\\p{Han}/", tag: "han"), [{ "message" => "漢字".b }])
+      assert_equal(["han"], d.events.map(&:first))
+    end
+
+    test "capture put into a tag with non-ASCII characters" do
+      d = run_rules(rule_conf(pattern: "/^(\\S+)/", tag: "ログ.$1"), [{ "message" => "abc" }, { "message" => "あいう".b }])
+      assert_equal(["ログ.abc", "ログ.あいう"], d.events.map(&:first))
+      assert_equal([Encoding::UTF_8, Encoding::UTF_8], d.events.map { |t, _, _| t.encoding })
+    end
+
+    test "capture put into a tag with non-ASCII characters, with an unused capture that is not valid UTF-8" do
+      d = run_rules(rule_conf(pattern: "/^(\\S+) (\\S+)/", tag: "ログ.$1"), [{ "message" => "あ caf\xE9".b }])
+      assert_equal(["ログ.あ"], d.events.map(&:first))
+      assert_equal([], d.error_events)
+    end
+
+    test "unknown placeholder is warned once when the tag is built again" do
+      d = run_rules(rule_conf(pattern: "/^(\\S+)/", tag: "ログ.$1.${unknown}"), [{ "message" => "あ".b }])
+      assert_equal(["ログ.あ."], d.events.map(&:first))
+      assert_equal(1, d.logs.grep(/unknown placeholder found/).size)
+    end
+
+    data("batch" => "batch", "record" => "record")
+    test "unknown placeholder is warned once when the tag cannot be built again" do |mode|
+      # ${unknown} comes before $1, so it is reached before "caf\xE9", which is not valid UTF-8, fails to join "ログ".
+      d = create_driver(rule_conf(pattern: "/^(.+)$/", tag: "ログ.${unknown}.$1", head: "emit_mode #{mode}"))
+      assert_raise(Encoding::CompatibilityError) do
+        d.run(default_tag: "input") { d.feed({ "message" => "caf\xE9".b }) }
+      end
+      assert_equal(1, d.logs.grep(/unknown placeholder found/).size)
+      assert_equal([], d.events)
+    end
+
+    # The tags below are built from the bytes, as before.
+    test "ASCII-only pattern matches the bytes" do
+      # "あいう" is 9 bytes in UTF-8, and .{3} matches the first 3 bytes, which are "あ".
+      d = run_rules(rule_conf(pattern: "/^(.{3})/", tag: "t.$1"), [{ "message" => "あいう".b }])
+      assert_equal(["t.あ".b], d.events.map { |t, _, _| t.b })
+    end
+
+    test "captures cut in the middle of a character" do
+      d = run_rules(rule_conf(pattern: "/^(.{3})(.)(.*)$/", tag: "out.$1$2$3"), [{ "message" => "あいう".b }])
+      assert_equal(["out.あいう".b], d.events.map { |t, _, _| t.b })
+      assert_equal([], d.error_events)
+    end
+
+    test "capture joined with an ASCII-8BIT tag" do
+      d = run_rules(rule_conf(pattern: "/^(.+)$/", tag: "${tag}.$1"), [{ "message" => "あ".b }], tag: "元".b)
+      assert_equal(["元.あ".b], d.events.map { |t, _, _| t.b })
+      assert_equal([], d.error_events)
+    end
+
+    test "value that is not valid UTF-8 is captured as it is" do
+      d = run_rules(rule_conf(pattern: "/^(\\S+)/", tag: "t.$1"), [{ "message" => "caf\xE9 au lait".b }])
+      assert_equal(["t.caf\xE9".b], d.events.map(&:first))
+      assert_equal([], d.error_events)
+    end
+
+    test "pattern in ASCII-8BIT matches the bytes" do
+      plugin = create_driver(rule_conf(pattern: "/x/", tag: "t")).instance
+      assert_not_nil(plugin.send(:regexp_last_match, Regexp.compile("\\xFF".b), "\xFFa".b))
+    end
+
+    # A pattern in UTF-8 reads the value as UTF-8.
+    data(
+      "not inverted" => [false, []],
+      "inverted"     => [true,  ["jp.other"]],
+    )
+    test "value that is not valid UTF-8 against a pattern with non-ASCII characters" do |(invert, expected)|
+      d = run_rules(rule_conf(pattern: "/^エラー/", tag: "jp.other", invert: invert), [{ "message" => "caf\xE9 au lait".b }])
+      assert_equal(expected, d.events.map(&:first))
+      assert_equal([], d.error_events)
+    end
+
+    test "bytes that are not valid UTF-8 are replaced with ? in the captures too" do
+      d = run_rules(rule_conf(pattern: "/^(\\S+) エラー/", tag: "t.$1"), [{ "message" => "caf\xE9 エラー".b }])
+      assert_equal(["t.caf?"], d.events.map(&:first))
+    end
+
+    # This changes the tags from before for a capture that is valid UTF-8 and has non-ASCII letters.
+    data(
+      "first letter, batch"      => ["batch", "émile", "t.Émile"],
+      "first letter, record"     => ["record", "émile", "t.Émile"],
+      "other letters, batch"     => ["batch", "aÉ", "t.Aé"],
+      "other letters, record"    => ["record", "aÉ", "t.Aé"],
+    )
+    test "capture is capitalized like a UTF-8 one" do |(mode, value, expected)|
+      d = run_rules(rule_conf(pattern: "/^(\\S+)/", tag: "t.$1"), [{ "message" => value.b }, { "message" => value }],
+                    head: "capitalize_regex_backreference yes\nemit_mode #{mode}")
+      assert_equal([expected.b, expected.b], d.events.map { |t, _, _| t.b })
+      assert_equal([], d.error_events)
+    end
+
+    data(EMIT_MODES)
+    test "capture that is not valid UTF-8 has only its ASCII letters capitalized, as before" do |mode|
+      d = run_rules(rule_conf(pattern: "/^(\\S+)/", tag: "t.$1"), [{ "message" => "caf\xC9 AU".b }, { "message" => "\xE9COLE".b }],
+                    head: "capitalize_regex_backreference yes\nemit_mode #{mode}")
+      assert_equal(["t.Caf\xC9".b, "t.\xE9cole".b], d.events.map { |t, _, _| t.b })
+      assert_equal([], d.error_events)
+    end
+
+    test "the record itself keeps its encoding" do
+      d = run_rules(rule_conf(pattern: "/^(あ)/", tag: "jp.$1"), [{ "message" => "あいう".b }])
+      assert_equal(Encoding::ASCII_8BIT, d.events.first[2]["message"].encoding)
+    end
+  end
 end

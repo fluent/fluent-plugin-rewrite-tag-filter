@@ -202,6 +202,12 @@ The `<label @UNMATCHED>` section must consume these records (for example, write 
 
 Alternatively, put `record_modifier` or `record_transformer` in front of this plugin so that the field always exists with a default value.
 
+### Values in ASCII-8BIT
+
+`in_tail` gives values in ASCII-8BIT when `encoding` is not set. Such a value is read as UTF-8 when the pattern is in UTF-8, such as a pattern with non-ASCII characters or `\p{Han}`, so the pattern can match it. The bytes that are not valid UTF-8 are replaced with `?`, as in a string with an invalid encoding, and the captures get the `?` too: `pattern /^(\S+) エラー/` with `tag t.$1` gives `t.caf?` for `"caf\xE9 エラー"`. A pattern in another encoding, such as a pattern with only ASCII characters, matches the bytes as before.
+
+A capture from such a value is put into the tag as it is, as before. When it cannot be joined with the rest of the tag, such as for `tag ログ.$1`, the captures that are valid UTF-8 are read as UTF-8. With `capitalize_regex_backreference`, a capture that is valid UTF-8 is capitalized as UTF-8, as it is for a value in UTF-8. This changes the tags from before: `émile` becomes `Émile` instead of `émile`, and `aÉ` becomes `Aé` instead of `AÉ`. A capture that is not valid UTF-8, such as Latin-1 bytes, has only its ASCII letters changed, as before.
+
 ### Nested attributes
 
 Dot notation:
