@@ -2,6 +2,20 @@ require 'helper'
 require 'tmpdir'
 require 'shellwords'
 
+# An output that keeps the events it gets, to see where Fluentd routes the events.
+class RewriteTagFilterTestCollectOutput < Fluent::Plugin::Output
+  Fluent::Plugin.register_output("rewrite_tag_filter_test_collect", self)
+  config_param :name, :string, default: "out"
+
+  def self.events
+    @events ||= []
+  end
+
+  def process(tag, es)
+    es.each { |_time, record| self.class.events << [@name, tag, record] }
+  end
+end
+
 # An output that fails, to see what happens when a later plugin fails to handle the re-emitted events.
 class RewriteTagFilterTestFailOutput < Fluent::Plugin::Output
   Fluent::Plugin.register_output("rewrite_tag_filter_test_fail", self)
