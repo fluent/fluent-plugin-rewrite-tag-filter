@@ -234,7 +234,7 @@ The plugin counts what happens to each record. The counters are totals for each 
 | `dropped_unmatched_records` | No rule matches a record. |
 | `dropped_unchanged_tag_records` | A rule matches, but the tag does not change and no label is set. |
 
-A record is counted each time it passes through this plugin, so a re-emitted record that comes back to the same `<match>` is counted again. A record that a later plugin fails to handle is counted in `reemitted_records`. An error that this plugin raises, such as for a label that is not defined, is counted in `num_errors` of the output.
+A record is counted each time it passes through this plugin, so a re-emitted record that comes back to the same `<match>` is counted again. A record that a later plugin fails to handle is counted in `reemitted_records`. An error that this plugin raises, such as for a label that is not defined, is counted in `retry_count` of the output, which is `num_errors` of the output in the metrics. Then the records of the event stream are not counted as dropped, because Fluentd sends the whole stream to `@ERROR` or back to the input. With `ignore_error` in `<store>` of `out_copy`, the stream is not sent anywhere, and its records are not counted as dropped either. In both cases, the records that were already re-emitted before the error are counted in `reemitted_records`.
 
 The counters have no breakdown by tag, because a tag made from a record can take any number of values. To count records by tag, count them where they arrive, for example with fluent-plugin-prometheus.
 

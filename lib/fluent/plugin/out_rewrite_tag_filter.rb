@@ -114,6 +114,9 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   end
 
   def process(tag, es)
+    # The counters are added to the metrics once for the stream, because adding takes a lock. The dropped records are not
+    # added when a record raises, because Fluentd then sends the whole stream to @ERROR or back to the input.
+    reemitted = dropped_unmatched = dropped_unchanged_tag = 0
     placeholder = get_placeholder(tag)
     new_event_streams =  Hash.new {|hh, kk| hh[kk] = Hash.new {|h, k| h[k] = Fluent::MultiEventStream.new }}if @batch_mode
 
@@ -121,14 +124,14 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       rewrited_tag, rewrited_label  = rewrite_tag(tag, record, placeholder)
       if (rewrited_tag.nil? || tag == rewrited_tag) && rewrited_label.nil?
         # rewrite_tag returns a nil tag only when no rule matched.
-        (rewrited_tag.nil? ? @dropped_unmatched_records_metrics : @dropped_unchanged_tag_records_metrics).inc
+        rewrited_tag.nil? ? dropped_unmatched += 1 : dropped_unchanged_tag += 1
         log.trace("rewrite_tag_filter: tag has not been rewritten", record)
         next
       end
       if new_event_streams.nil?
         labeled_router = get_router(rewrited_label)
         # Counted before the emit, so a record that a later plugin fails to handle is counted too, as the README says.
-        @reemitted_records_metrics.inc
+        reemitted += 1
         labeled_router.emit(rewrited_tag, time, record)
       else
         new_event_streams[rewrited_label][rewrited_tag].add(time, record)
@@ -138,11 +141,15 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       new_event_streams.each do |rewrited_label, label_event_streams |
         labeled_router = get_router(rewrited_label)
         label_event_streams.each do |rewrited_tag, new_es|
-            @reemitted_records_metrics.add(new_es.size)
+            reemitted += new_es.size
             labeled_router.emit_stream(rewrited_tag, new_es)
         end
       end
     end
+    @dropped_unmatched_records_metrics.add(dropped_unmatched) if dropped_unmatched > 0
+    @dropped_unchanged_tag_records_metrics.add(dropped_unchanged_tag) if dropped_unchanged_tag > 0
+  ensure
+    @reemitted_records_metrics.add(reemitted) if reemitted > 0
   end
 
   def rewrite_tag(tag, record, placeholder)

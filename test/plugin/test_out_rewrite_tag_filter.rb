@@ -1174,6 +1174,18 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       Fluent::Engine.init(Fluent::SystemConfig.new)
     end
 
+    data(EMIT_MODES)
+    test "the records before a record that raises are not counted as dropped" do |mode|
+      d = create_driver(rule_conf(pattern: "/^(.+)$/", tag: "ログ.$1", head: "emit_mode #{mode}") + rule_conf(key: "other", pattern: "/x/", tag: "t"))
+      assert_raise(Encoding::CompatibilityError) do
+        d.run(default_tag: "input") do
+          d.feed([[event_time, { "other" => "y" }], [event_time, { "other" => "y" }], [event_time, { "message" => "caf\xE9".b }]])
+        end
+      end
+      # Fluentd sends the whole stream to @ERROR or back to the input, so nothing is dropped.
+      assert_equal(0, d.instance.statistics['output']['dropped_unmatched_records'])
+    end
+
     # Without <label @ERROR>, the error of the later plugin goes back through this plugin to the input. The records
     # handed to it are still counted as re-emitted: both in batch mode, and the first one in record mode.
     data(EMIT_MODES)
