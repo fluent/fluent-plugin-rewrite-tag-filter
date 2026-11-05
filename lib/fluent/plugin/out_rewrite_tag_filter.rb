@@ -56,7 +56,19 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       check_rule(rule)
 
       invert = rule.invert ? MATCH_OPERATOR_EXCLUDE : ""
-      @rewriterules.push([record_accessor_create(rule.key), rule.pattern, invert, rule.tag, rule.label])
+      begin
+        accessor = record_accessor_create(rule.key)
+      rescue Fluent::ConfigError => e
+        # Reported with the broken settings, so they can be fixed at once.
+        report_broken_setting e.message, key: rule.key
+        next
+      rescue ArgumentError => e
+        # Fluentd raises ArgumentError from Integer() for an index that is not an integer, such as $.a[x].
+        raise unless e.message.start_with?('invalid value for Integer()')
+        report_broken_setting "the index in [] of the key must be an integer: #{e.message}", key: rule.key
+        next
+      end
+      @rewriterules.push([accessor, rule.pattern, invert, rule.tag, rule.label])
       @rule_keys[@rewriterules.last.first] = rule.key
       rewriterule_names.push([rule.key, invert, rule.pattern.to_s])
       log.info "adding rewrite_tag_filter rule: #{rule.key} #{@rewriterules.last}"

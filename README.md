@@ -219,7 +219,7 @@ The rules are checked at startup. A setting that may not do what you meant is re
 - Text that looks like a placeholder but is not one (see "Tag placeholder").
 - An empty tag.
 
-The following settings are certainly broken, so they stop the startup with a configuration error. Before v3.0.0, they were only reported with a warning:
+The following settings are certainly broken, so they stop the startup with a configuration error. Before v3.0.0, a range with one-digit numbers in both forms already stopped the startup. The others were only reported with a warning in v2.5, and not reported in v2.4 and earlier:
 
 - A label that is not defined with `<label>`. `label @ROOT` and `label ""` need no `<label>`. The event stream that has a record for it raises the error, so Fluentd sends the whole stream to `@ERROR`, or the error goes back to the input without `<label @ERROR>`. When the plugin is in `<store ignore_error>` of `out_copy`, `out_copy` can catch the error before Fluentd routes it: it logs the error, and the stream does not go to `@ERROR`. `label @ERROR` is checked only at the top level, in a `<match>` or its `<store>` of `out_copy`, because `@ERROR` is set up after the other `<label>` sections. Define `<label @ERROR>` when a rule uses it. With `workers` more than 1, it is only warned, because a `<label>` in `<worker N>` is set up only in that worker. In `<worker N>`, the label must be defined for that worker.
 - A range in `${tag_parts[n]}` or `__TAG_PARTS[n]__`, such as `${tag_parts[0..2]}`.

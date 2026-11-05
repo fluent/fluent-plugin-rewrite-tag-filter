@@ -250,18 +250,30 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
         assert_equal([], warnings_of(plugin).grep(/not a supported placeholder/))
       end
 
-      test "all the broken settings are reported at once" do
-        rules = rule_conf(tag: "t.${tag_parts[0..1]}") + rule_conf(key: "other", tag: "new.${tag}", label: "@UNDEFINED")
-        assert_broken(/does not support range.*\. label @UNDEFINED is not defined\. .* key="other" tag="new\.\$\{tag\}"\z/m) { configure_in("store", rules) }
-      end
-
       test "text that a token takes is not a range" do
         # __X__ is a token, so TAG_PARTS[0..1]__ stays in the tag as written.
-        assert_not_broken { create_driver(rule_conf(tag: "b.__X__TAG_PARTS[0..1]__")) }
+        plugin = Fluent::Plugin::RewriteTagFilterOutput.new
+        assert_not_broken { plugin.configure(Fluent::Config.parse(rule_conf(tag: "b.__X__TAG_PARTS[0..1]__"), "(test)", "(test_dir)", syntax: :v1)); plugin }
       end
 
       test "a range is reported with the key and the tag" do
-        assert_broken(/does not support range specify\. The next major version will stop the startup with this setting key="message" tag="t\.\$\{tag_parts\[0\.\.1\]\}"$/) { create_driver(rule_conf(tag: "t.${tag_parts[0..1]}")) }
+        assert_broken(/does not support range specify key="message" tag="t\.\$\{tag_parts\[0\.\.1\]\}"\z/) { configure_in("store", rule_conf(tag: "t.${tag_parts[0..1]}")) }
+      end
+
+      data(
+        "ConfigError" => ["$.[bad", /'\[' found but '\]' not found.* key="\$\.\[bad"/],
+        "ArgumentError" => ["$.a[x]", /the index in \[\] of the key must be an integer: invalid value for Integer\(\).* key="\$\.a\[x\]"/],
+      )
+      test "a bad key is reported with the other broken settings" do |(key, message)|
+        rules = rule_conf(tag: "new.${tag}", label: "@UNDEFINED") + rule_conf(key: key, tag: "t")
+        error = assert_raise(Fluent::ConfigError) { configure_in("store", rules) }
+        assert_match(/label @UNDEFINED is not defined\. /, error.message)
+        assert_match(message, error.message)
+      end
+
+      test "all the broken settings are reported at once" do
+        rules = rule_conf(tag: "t.${tag_parts[0..1]}") + rule_conf(key: "other", tag: "new.${tag}", label: "@UNDEFINED")
+        assert_broken(/does not support range.*\. label @UNDEFINED is not defined\. .* key="other" tag="new\.\$\{tag\}"\z/m) { configure_in("store", rules) }
       end
 
       sub_test_case "label" do
