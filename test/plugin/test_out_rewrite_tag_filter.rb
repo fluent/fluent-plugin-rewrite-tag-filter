@@ -14,11 +14,6 @@ class RewriteTagFilterTestCollectOutput < Fluent::Plugin::Output
   def process(tag, es)
     es.each { |_time, record| self.class.events << [@name, tag, record] }
   end
-
-  # Some tests configure two workers, and Fluentd checks this for an output in <store> of out_copy.
-  def multi_workers_ready?
-    true
-  end
 end
 
 # An output that fails, to see what happens when a later plugin fails to handle the re-emitted events.
