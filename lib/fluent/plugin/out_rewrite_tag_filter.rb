@@ -363,7 +363,9 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   # Whether events re-emitted to the label go to the routing that this <match> is in.
   def comes_back?(label)
     own = own_router
-    !own.nil? && get_router(label).equal?(own)
+    # Not get_router: EventEmitter#router sets the caller of the shared router.
+    target = label.nil? || label.empty? ? @router : event_emitter_router(label)
+    !own.nil? && target.equal?(own)
   rescue ArgumentError
     # The label is not defined, or it is @ERROR that is not set up yet.
     false
@@ -385,10 +387,11 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   end
 
   # A <filter> before this plugin may change the records, so that another rule matches them when they come back.
-  # Without a tag, any <filter> counts: the tag of the incoming events is not known.
+  # Without a tag, any <filter> counts: the tag of the incoming events is not known. When the rules cannot be read, a
+  # <filter> may be there, so a working config is not reported as broken.
   def filtered_before?(tag = nil)
     rules = rules_before
-    !rules.nil? && rules.any? { |r| r.collector.is_a?(Fluent::Plugin::Filter) && (tag.nil? || r.match?(tag)) }
+    rules.nil? || rules.any? { |r| r.collector.is_a?(Fluent::Plugin::Filter) && (tag.nil? || r.match?(tag)) }
   end
 
   # A re-emitted event whose tag routes back to this <match> hits the same rule again, because the record is unchanged.
@@ -418,9 +421,12 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     # come back. A fixed tag is not certainly broken then.
     if variable || filtered_before?(new_tag)
       log.warn "rewrite_tag_filter: a re-emitted event may come back to this <match>, and be dropped, or come back again and again until SystemStackError is raised. Use a tag that this <match> does not cover, or a label that does not route back to it", key: rule.key, tag: rule.tag, example: new_tag
+    elsif label.nil?
+      # Without a label, the events are only dropped. A rule may be meant for it: an event whose tag is already the new tag
+      # is not re-emitted, as the README says, so it is only warned.
+      log.warn "rewrite_tag_filter: the events for the rule are dropped: tag #{new_tag} comes back to this <match>, and an event whose tag is already #{new_tag} is not re-emitted. Use a tag that this <match> does not cover, or a label that does not route back to it", key: rule.key, tag: rule.tag
     else
-      dropped = label ? "re-emitted again and again until SystemStackError is raised" : "dropped"
-      report_broken_setting "the rule re-emits events with tag #{new_tag}, which comes back to this <match> and is #{dropped}. Use a tag that this <match> does not cover, or a label that does not route back to it", key: rule.key, tag: rule.tag
+      report_broken_setting "the rule re-emits events with tag #{new_tag}, which comes back to this <match> and is re-emitted again and again until SystemStackError is raised. Use a tag that this <match> does not cover, or a label that does not route back to it", key: rule.key, tag: rule.tag
     end
   end
 

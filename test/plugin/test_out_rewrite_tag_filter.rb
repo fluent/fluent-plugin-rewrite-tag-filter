@@ -415,10 +415,17 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
         "match everything"           => ["match **",                "clear",              nil],
         "<match> without a pattern"  => ["match",                   "clear",              nil],
       )
-      test "fixed tag is a broken setting" do |(directive, tag, label, invert)|
-        assert_broken(/comes back to this <match> and is dropped/) do
-          configure_in(directive, rule_conf(tag: tag, label: label, invert: invert || false))
-        end
+      test "fixed tag without a label is only warned, because its events are only dropped" do |(directive, tag, label, invert)|
+        plugin = nil
+        assert_not_broken { plugin = configure_in(directive, rule_conf(tag: tag, label: label, invert: invert || false)) }
+        assert_warned(plugin, "the events for the rule are dropped: tag #{tag} comes back to this <match>")
+      end
+
+      test "fixed tag that is the incoming tag, to drop some events, is only warned" do
+        plugin = nil
+        conf = rule_conf(pattern: "/^\\/health/", tag: "app.access") + rule_conf(pattern: "/./", tag: "processed.access")
+        assert_not_broken { plugin = configure_in("match app.access", conf) }
+        assert_warned(plugin, "an event whose tag is already app.access is not re-emitted")
       end
 
       data("label @ROOT" => "@ROOT", 'label ""' => '""')
@@ -430,7 +437,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
 
       test "an earlier <filter> for another tag does not change it" do
         Fluent::Engine.root_agent.event_router.add_rule("other.**", Class.new(Fluent::Plugin::Filter) { def filter(_tag, _time, record) record end }.new)
-        assert_broken(/comes back to this <match>/) { configure_in("match kubernetes.**", rule_conf(tag: "kubernetes.default")) }
+        assert_broken(/comes back to this <match>/) { configure_in("match kubernetes.**", rule_conf(tag: "kubernetes.default", label: "@ROOT")) }
       end
 
       test "an earlier <filter> for the re-emitted tag may change the records, so it is only warned" do
@@ -442,7 +449,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       end
 
       test "an unknown placeholder that starts with ${tag or __TAG does not make the tag change" do
-        assert_broken(/comes back to this <match> and is dropped/) { configure_in("match kubernetes.**", rule_conf(tag: "kubernetes.__TAGX__")) }
+        assert_broken(/comes back to this <match> and is re-emitted again and again/) { configure_in("match kubernetes.**", rule_conf(tag: "kubernetes.__TAGX__", label: "@ROOT")) }
       end
 
       test "@label of the plugin sends the re-emitted event to another label" do
@@ -473,7 +480,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       )
       test "no error and no warning" do |(directive, tag, label, head)|
         plugin = with_label("@OTHER") { configure_in(directive, rule_conf(tag: tag, label: label, head: head.to_s)) }
-        assert_equal([], warnings_of(plugin).select { |l| l.include?("<match>") })
+        assert_equal([], warnings_of(plugin))
       end
 
       data(
@@ -487,7 +494,11 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
         else
           router.instance_variable_set(:@match_rules, [Object.new])
         end
-        assert_not_broken { configure_in("match kubernetes.**", rule_conf(tag: "kubernetes.default")) }
+        assert_not_broken { configure_in("match kubernetes.**", rule_conf(tag: "kubernetes.default", label: "@ROOT")) }
+        # A <filter> may be before it, so the unchanged tag with a label that comes back is only warned.
+        plugin = nil
+        assert_not_broken { plugin = configure_in("match kubernetes.**", rule_conf(tag: "${tag}", label: "@ROOT")) }
+        assert_warned(plugin, "the rule re-emits events with the unchanged tag to label @ROOT")
       end
 
       test "the check is skipped in a test driver without Fluent::Test.setup" do
