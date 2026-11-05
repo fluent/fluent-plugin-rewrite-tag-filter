@@ -258,7 +258,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
         Fluent::Engine.root_agent.event_router.add_rule("**", Class.new(Fluent::Plugin::Filter) { def filter(_tag, _time, record) record end }.new)
         plugin = nil
         assert_not_broken { plugin = configure_in("match input.**", rule_conf(tag: "${tag}", label: "@ROOT")) }
-        assert_warned(plugin, 'They come back until a <filter> changes them so that another rule matches, or until they are stopped as a loop key="message" tag="${tag}"')
+        assert_warned(plugin, 'They come back until a <filter> changes them so that another rule matches, or until SystemStackError is raised key="message" tag="${tag}"')
       end
 
       test "re-emitting the unchanged tag to the label that this <match> is in" do
@@ -422,8 +422,8 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       end
 
       data("label @ROOT" => "@ROOT", 'label ""' => '""')
-      test "fixed tag with a label that comes back is stopped as a loop" do |label|
-        assert_broken(/comes back to this <match> and is stopped as a loop after it comes back 10 times\. .*does not route back to it\. The next major version will stop the startup with this setting key="message" tag="kubernetes\.default"/) do
+      test "fixed tag with a label that comes back is re-emitted until SystemStackError" do |label|
+        assert_broken(/comes back to this <match> and is re-emitted again and again until SystemStackError is raised\. .*does not route back to it\. The next major version will stop the startup with this setting key="message" tag="kubernetes\.default"/) do
           configure_in("match kubernetes.**", rule_conf(tag: "kubernetes.default", label: label))
         end
       end
@@ -437,7 +437,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
         Fluent::Engine.root_agent.event_router.add_rule("**", Class.new(Fluent::Plugin::Filter) { def filter(_tag, _time, record) record end }.new)
         plugin = nil
         assert_not_broken { plugin = configure_in("match kubernetes.**", rule_conf(tag: "kubernetes.default")) }
-        assert_warned(plugin, "a re-emitted event may come back to this <match>, and be dropped, or stopped as a loop after it comes back 10 times")
+        assert_warned(plugin, "a re-emitted event may come back to this <match>, and be dropped, or come back again and again until SystemStackError is raised")
         assert_warned(plugin, "or a label that does not route back to it")
       end
 

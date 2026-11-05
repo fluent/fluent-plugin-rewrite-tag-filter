@@ -302,7 +302,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     if label && unchanged_tag?(rule) && @remove_tag_regexp.nil? && comes_back?(label)
       message = "the rule re-emits events with the unchanged tag to label #{label.empty? ? '""' : label}, which routes them back to this plugin"
       if filtered_before?
-        log.warn "rewrite_tag_filter: #{message}. They come back until a <filter> changes them so that another rule matches, or until they are stopped as a loop", key: rule.key, tag: rule.tag
+        log.warn "rewrite_tag_filter: #{message}. They come back until a <filter> changes them so that another rule matches, or until SystemStackError is raised", key: rule.key, tag: rule.tag
       else
         report_broken_setting message, key: rule.key, tag: rule.tag
       end
@@ -417,9 +417,9 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     # A <filter> before this <match> for the new tag may change the records, so that another rule matches them when they
     # come back. A fixed tag is not certainly broken then.
     if variable || filtered_before?(new_tag)
-      log.warn "rewrite_tag_filter: a re-emitted event may come back to this <match>, and be dropped, or stopped as a loop after it comes back #{@max_reemit_depth} times. Use a tag that this <match> does not cover, or a label that does not route back to it", key: rule.key, tag: rule.tag, example: new_tag
+      log.warn "rewrite_tag_filter: a re-emitted event may come back to this <match>, and be dropped, or come back again and again until SystemStackError is raised. Use a tag that this <match> does not cover, or a label that does not route back to it", key: rule.key, tag: rule.tag, example: new_tag
     else
-      dropped = label ? "stopped as a loop after it comes back #{@max_reemit_depth} times" : "dropped"
+      dropped = label ? "re-emitted again and again until SystemStackError is raised" : "dropped"
       report_broken_setting "the rule re-emits events with tag #{new_tag}, which comes back to this <match> and is #{dropped}. Use a tag that this <match> does not cover, or a label that does not route back to it", key: rule.key, tag: rule.tag
     end
   end
