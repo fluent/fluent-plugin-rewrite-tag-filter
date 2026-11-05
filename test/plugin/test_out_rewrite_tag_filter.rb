@@ -2,6 +2,15 @@ require 'helper'
 require 'tmpdir'
 require 'shellwords'
 
+# An output that fails, to see what happens when a later plugin fails to handle the re-emitted events.
+class RewriteTagFilterTestFailOutput < Fluent::Plugin::Output
+  Fluent::Plugin.register_output("rewrite_tag_filter_test_fail", self)
+
+  def process(_tag, _es)
+    raise "failed in a later plugin"
+  end
+end
+
 class RewriteTagFilterOutputTest < Test::Unit::TestCase
   def setup
     Fluent::Test.setup
@@ -1100,6 +1109,81 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     test "the record itself keeps its encoding" do
       d = run_rules(rule_conf(pattern: "/^(あ)/", tag: "jp.$1"), [{ "message" => "あいう".b }])
       assert_equal(Encoding::ASCII_8BIT, d.events.first[2]["message"].encoding)
+    end
+  end
+
+  sub_test_case "metrics" do
+    COUNTERS = %w[reemitted_records dropped_unmatched_records dropped_unchanged_tag_records error_records].freeze
+
+    test "the counters are added to the statistics of the output" do
+      d = create_driver(rule_conf(tag: "new.${tag}"))
+      stats = d.instance.statistics['output']
+      assert_equal(COUNTERS.to_h { |name| [name, 0] }, stats.slice(*COUNTERS))
+      assert_true(stats.key?('emit_records'))
+    end
+
+    # Fluentd with its own router. error_records is checked with a loop, in "re-emitted event that comes back to this plugin".
+    data(EMIT_MODES)
+    test "each record is counted by what happened to it" do |mode|
+      conf = %[
+        <match input>
+          @type rewrite_tag_filter
+          emit_mode #{mode}
+          #{rule_conf(pattern: "/^new$/", tag: "new.${tag}")}
+          #{rule_conf(pattern: "/^same$/", tag: "${tag}")}
+        </match>
+        <match new.**>
+          @type rewrite_tag_filter_test_collect
+          name new
+        </match>
+        <label @ERROR>
+          <match **>
+            @type rewrite_tag_filter_test_collect
+            name error
+          </match>
+        </label>
+      ]
+      RewriteTagFilterTestCollectOutput.events.clear
+      Fluent::Engine.run_configure(Fluent::Config.parse(conf, "(test)", "(test_dir)", syntax: :v1))
+      es = Fluent::MultiEventStream.new
+      %w[new new other same].each { |message| es.add(event_time, { "message" => message }) }
+      Fluent::Engine.root_agent.event_router.emit_stream("input", es)
+      plugin = Fluent::Engine.root_agent.outputs.find { |output| output.is_a?(Fluent::Plugin::RewriteTagFilterOutput) }
+      expected = {
+        "reemitted_records" => 2,
+        "dropped_unmatched_records" => 1,
+        "dropped_unchanged_tag_records" => 1,
+        "error_records" => 0,
+      }
+      assert_equal(expected, plugin.statistics['output'].slice(*COUNTERS))
+      assert_equal(%w[new new], RewriteTagFilterTestCollectOutput.events.map(&:first))
+    ensure
+      Fluent::Engine.init(Fluent::SystemConfig.new)
+    end
+
+    # Without <label @ERROR>, the error of the later plugin goes back through this plugin to the input. The records
+    # handed to it are still counted as re-emitted: both in batch mode, and the first one in record mode.
+    data(EMIT_MODES)
+    test "a record that a later plugin fails to handle is counted as re-emitted" do |mode|
+      conf = %[
+        <match input>
+          @type rewrite_tag_filter
+          emit_mode #{mode}
+          #{rule_conf(pattern: "/^new$/", tag: "new.${tag}")}
+        </match>
+        <match new.**>
+          @type rewrite_tag_filter_test_fail
+        </match>
+      ]
+      Fluent::Engine.run_configure(Fluent::Config.parse(conf, "(test)", "(test_dir)", syntax: :v1))
+      es = Fluent::MultiEventStream.new
+      2.times { es.add(event_time, { "message" => "new" }) }
+      error = assert_raise(RuntimeError) { Fluent::Engine.root_agent.event_router.emit_stream("input", es) }
+      assert_equal("failed in a later plugin", error.message)
+      plugin = Fluent::Engine.root_agent.outputs.find { |output| output.is_a?(Fluent::Plugin::RewriteTagFilterOutput) }
+      assert_equal(mode == "batch" ? 2 : 1, plugin.statistics['output']['reemitted_records'])
+    ensure
+      Fluent::Engine.init(Fluent::SystemConfig.new)
     end
   end
 end

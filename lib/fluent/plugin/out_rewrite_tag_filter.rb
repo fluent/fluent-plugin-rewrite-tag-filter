@@ -4,7 +4,7 @@ require "fluent/config/regexp_type"
 class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   Fluent::Plugin.register_output('rewrite_tag_filter', self)
 
-  helpers :event_emitter, :record_accessor
+  helpers :event_emitter, :record_accessor, :metrics
 
   desc 'Capitalize letter for every matched regex backreference.'
   config_param :capitalize_regex_backreference, :bool, :default => false
@@ -82,6 +82,23 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     end
 
     @batch_mode = @emit_mode == :batch
+
+    @reemitted_records_metrics = metrics_create(namespace: "fluentd", subsystem: "rewrite_tag_filter", name: "reemitted_records", help_text: "Number of records re-emitted with a new tag or label")
+    @dropped_unmatched_records_metrics = metrics_create(namespace: "fluentd", subsystem: "rewrite_tag_filter", name: "dropped_unmatched_records", help_text: "Number of records dropped because no rule matched")
+    @dropped_unchanged_tag_records_metrics = metrics_create(namespace: "fluentd", subsystem: "rewrite_tag_filter", name: "dropped_unchanged_tag_records", help_text: "Number of records dropped because the tag did not change and no label was set")
+    @error_records_metrics = metrics_create(namespace: "fluentd", subsystem: "rewrite_tag_filter", name: "error_records", help_text: "Number of records sent to @ERROR")
+  end
+
+  # The counters are added to the statistics of the output, which in_monitor_agent shows.
+  def statistics
+    stats = super
+    stats['output'] = stats['output'].merge(
+      'reemitted_records' => @reemitted_records_metrics.get,
+      'dropped_unmatched_records' => @dropped_unmatched_records_metrics.get,
+      'dropped_unchanged_tag_records' => @dropped_unchanged_tag_records_metrics.get,
+      'error_records' => @error_records_metrics.get,
+    )
+    stats
   end
 
   def multi_workers_ready?
@@ -105,11 +122,16 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     es.each do |time, record|
       rewrited_tag, rewrited_label  = rewrite_tag(tag, record, placeholder)
       if (rewrited_tag.nil? || tag == rewrited_tag) && rewrited_label.nil?
+        # rewrite_tag returns a nil tag only when no rule matched.
+        (rewrited_tag.nil? ? @dropped_unmatched_records_metrics : @dropped_unchanged_tag_records_metrics).inc
         log.trace("rewrite_tag_filter: tag has not been rewritten", record)
         next
       end
       if new_event_streams.nil?
-        get_router(rewrited_label).emit(rewrited_tag, time, record)
+        labeled_router = get_router(rewrited_label)
+        # Counted before the emit, so a record that a later plugin fails to handle is counted too, as the README says.
+        @reemitted_records_metrics.inc
+        labeled_router.emit(rewrited_tag, time, record)
       else
         new_event_streams[rewrited_label][rewrited_tag].add(time, record)
       end
@@ -118,6 +140,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       new_event_streams.each do |rewrited_label, label_event_streams |
         labeled_router = get_router(rewrited_label)
         label_event_streams.each do |rewrited_tag, new_es|
+            @reemitted_records_metrics.add(new_es.size)
             labeled_router.emit_stream(rewrited_tag, new_es)
         end
       end
