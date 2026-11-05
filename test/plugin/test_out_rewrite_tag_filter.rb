@@ -16,6 +16,17 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
 
   EMIT_MODES = { "batch" => "batch", "record" => "record" }.freeze
 
+  # target is a driver or a plugin.
+  def warnings_of(target)
+    target = target.instance if target.respond_to?(:instance)
+    target.log.out.logs.grep(/\[warn\]/)
+  end
+
+  def assert_warned(target, message)
+    warnings = warnings_of(target)
+    assert_true(warnings.any? { |l| l.include?(message) }, warnings.inspect)
+  end
+
   def create_driver(conf)
     Fluent::Test::Driver::Output.new(Fluent::Plugin::RewriteTagFilterOutput).configure(conf)
   end
@@ -166,6 +177,93 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
         assert_nothing_raised do
           create_driver(rules_conf(*rules))
         end
+      end
+    end
+  end
+
+  sub_test_case "configure checks" do
+    BROKEN_SETTING = "The next major version will stop the startup"
+
+    # The block returns a driver or a plugin.
+    def broken_warnings
+      warnings_of(yield).select { |l| l.include?(BROKEN_SETTING) }
+    end
+
+    def assert_broken(message = //, &block)
+      warnings = broken_warnings(&block)
+      assert_true(warnings.any? { |l| l.match?(message) }, warnings.inspect)
+    end
+
+    def assert_not_broken(&block)
+      assert_equal([], broken_warnings(&block))
+    end
+
+    # They are only warned, so that a minor update does not stop Fluentd. The next major version will stop the startup.
+    sub_test_case "settings that are certainly broken" do
+      data(
+        "${tag_parts[a..b]}"           => "t.${tag_parts[0..1]}",
+        "${tag_parts[a...b]}"          => "t.${tag_parts[0...1]}",
+        "__TAG_PARTS[a..b]__"          => "t.__TAG_PARTS[0..1]__",
+        "two-digit range"              => "t.${tag_parts[0..10]}",
+        "both forms, two-digit range"  => "t.${tag_parts[0..10]}.__TAG_PARTS[0..10]__",
+      )
+      test "range of tag_parts" do |tag|
+        d = create_driver(rule_conf(tag: tag))
+        assert_broken(/does not support range/) { d }
+        assert_equal([], warnings_of(d).grep(/not a supported placeholder/))
+      end
+
+      test "a range in both forms stops the startup as before" do
+        assert_raise(Fluent::ConfigError) { create_driver(rule_conf(tag: "t.${tag_parts[0..1]}.__TAG_PARTS[0..1]__")) }
+      end
+    end
+
+    sub_test_case "settings that may not do what the user meant are warned" do
+      data(
+        "unknown ${...}"            => ["t.${unknown}",        "unknown placeholder ${unknown} expands to an empty string"],
+        "unknown __...__"           => ["t.__UNKNOWN__",       "unknown placeholder __UNKNOWN__ expands to an empty string"],
+        "leading zero"              => ["t.${tag_parts[01]}",  "unknown placeholder ${tag_parts[01]} expands to an empty string"],
+        "upper case ${TAG}"         => ["t.${TAG}",            "${TAG} is not a supported placeholder and stays in the tag as written"],
+        "lower case __tag__"        => ["t.__tag__",           "__tag__ is not a supported placeholder and stays in the tag as written"],
+        "negative index"            => ["t.${tag_parts[-1]}",  "${tag_parts[-1]} is not a supported placeholder and stays in the tag as written"],
+        "$0"                        => ["t.$0",                "$0 is not a backreference to a capture group, so it expands to an empty string"],
+        "$01"                       => ["t.$01",               "$01 is not a backreference to a capture group, so it expands to an empty string"],
+        "$3 with two groups"        => ["t.$3",                "the pattern has 2 capture group(s), so $3 expands to an empty string"],
+        "empty tag"                 => ['""',                  "the rule rewrites the tag to an empty string"],
+      )
+      test "tag" do |(tag, message)|
+        assert_warned(create_driver(rule_conf(tag: tag)), message)
+      end
+
+      data(
+        "plain"                        => [/^(a)(b)$/, 2],
+        "no groups"                    => [/^ab$/, 0],
+        "extended mode with a comment" => [/(?x) (a) # trailing comment/, 1],
+        "extended option"              => [Regexp.new("(a) # comment", Regexp::EXTENDED), 1],
+      )
+      test "capture groups are counted" do |(pattern, count)|
+        plugin = create_driver(rule_conf(tag: "t")).instance
+        assert_equal(count, plugin.send(:capture_group_count, pattern))
+      end
+
+      test "backreference in an invert rule" do
+        assert_warned(create_driver(rule_conf(tag: "t.$1", invert: true)), "an invert rule has no captures, so $1 stays in the tag as written")
+      end
+
+      data(
+        "placeholders"          => ["t.${tag}.__TAG__.${tag_parts[0]}.__TAG_PARTS[10]__.${hostname}.__HOSTNAME__", "/^(a)(b)$/"],
+        "adjacent placeholders" => ["t.__TAG_PARTS[0]____TAG__${tag}", "/^(a)(b)$/"],
+        "backreferences"        => ["t.$1.$2", "/^(a)(b)$/"],
+        "$10 with 12 groups"    => ["t.$10.$12", "/^" + "(.)" * 12 + "$/"],
+        "named capture"         => ["t.$1", "/^(?<name>a)$/"],
+        "optional group"        => ["t.$1$2", "/^(a)?(b)$/"],
+        "alternation"           => ["t.$1$2", "/^(?:(a)|(b))$/"],
+        "double underscores"    => ["app__web__log.$1", "/^(a)(b)$/"],
+        "text around a token"   => ["t.__hostname_${tag}__.$$1{a}", "/^(a)(b)$/"],
+      )
+      test "no warning for a valid rule" do |(tag, pattern)|
+        d = create_driver(rule_conf(tag: tag, pattern: pattern, head: "hostname_command echo host"))
+        assert_equal([], warnings_of(d))
       end
     end
   end
