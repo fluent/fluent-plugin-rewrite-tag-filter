@@ -31,6 +31,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   end
 
   MATCH_OPERATOR_EXCLUDE = '!'
+  TAG_TOKEN_REGEXP = /(\$\d+)|(\${[a-z_]+(?:\[[0-9]+\])?}|__TAG_PARTS\[[0-9]+\]__|__[A-Z_]+?__)/
 
   def configure(conf)
     super
@@ -136,15 +137,36 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     return nil, nil
   end
 
+  # The tag is built from the captures as they are, as before. When an ASCII-8BIT capture cannot be joined with the rest
+  # of the tag, such as for `tag ログ.$1`, the captures that are valid UTF-8 are read as UTF-8 and the tag is built again.
   def expand_tag(rewritetag, backreference_table, placeholder, tag)
+    unknown = []
+    begin
+      expand_tag_once(rewritetag, backreference_table, placeholder, unknown)
+    rescue Encoding::CompatibilityError
+      raise unless backreference_table
+      unknown.clear
+      # Not Hash#transform_values, which needs Ruby 2.4: Fluentd up to 1.8 runs on Ruby 2.1.
+      utf8_table = backreference_table.map { |key, value| [key, binary_as_utf8(value)] }.to_h
+      expand_tag_once(rewritetag, utf8_table, placeholder, unknown)
+    end
+  ensure
+    # Warned after the last pass, so it is warned once even when the tag is built again, and also when building the tag
+    # fails, as before.
+    unknown.each do |name|
+      log.warn "rewrite_tag_filter: unknown placeholder found. :placeholder=>#{name} :tag=>#{tag} :rewritetag=>#{rewritetag}"
+    end
+  end
+
+  def expand_tag_once(rewritetag, backreference_table, placeholder, unknown)
     # Backreferences and placeholders are expanded in one pass, so text taken
     # from a record can never turn into a placeholder.
-    rewritetag.gsub(/(\$\d+)|(\${[a-z_]+(?:\[[0-9]+\])?}|__TAG_PARTS\[[0-9]+\]__|__[A-Z_]+?__)/) do
+    rewritetag.gsub(TAG_TOKEN_REGEXP) do
       if $1
         # An invert rule has no captures, so "$1" stays as it is written.
         backreference_table ? backreference_table[$1] : $1
       else
-        log.warn "rewrite_tag_filter: unknown placeholder found. :placeholder=>#{$2} :tag=>#{tag} :rewritetag=>#{rewritetag}" unless placeholder.include?($2)
+        unknown << $2 unless placeholder.include?($2)
         placeholder[$2]
       end
     end
@@ -171,7 +193,32 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     log.warn "rewrite_tag_filter: a parent in the nested key cannot be read with the next key, so the key is treated as missing. This is logged once for each rule", key: @rule_keys[record_accessor], error: error.message
   end
 
+  # in_tail without `encoding` gives ASCII-8BIT strings.
+  def binary_with_non_ascii?(value)
+    value.is_a?(String) && value.encoding == Encoding::ASCII_8BIT && !value.ascii_only?
+  end
+
+  def binary_as_utf8(value)
+    return value unless binary_with_non_ascii?(value)
+    utf8 = value.dup.force_encoding(Encoding::UTF_8)
+    utf8.valid_encoding? ? utf8 : value
+  end
+
+  # capitalize changes only the ASCII letters of an ASCII-8BIT capture, so "émile" stays "émile". Capitalize a capture
+  # that is valid UTF-8 as UTF-8, and keep it in ASCII-8BIT, so the tag is built from the same encoding as before.
+  def capitalize_capture(value)
+    utf8 = binary_as_utf8(value)
+    return value.capitalize if utf8.equal?(value)
+    utf8.capitalize.force_encoding(Encoding::ASCII_8BIT)
+  end
+
   def regexp_last_match(regexp, rewritevalue)
+    # A pattern in UTF-8, such as one with non-ASCII characters or \p{Han}, cannot be matched against an ASCII-8BIT
+    # string with non-ASCII bytes. Read the string as UTF-8, and the bytes that are not valid UTF-8 are replaced below.
+    # A pattern in another encoding, such as one with only ASCII characters, matches the bytes as before.
+    if regexp.encoding == Encoding::UTF_8 && binary_with_non_ascii?(rewritevalue)
+      rewritevalue = rewritevalue.dup.force_encoding(Encoding::UTF_8)
+    end
     if rewritevalue.valid_encoding?
       regexp.match(rewritevalue)
     else
@@ -184,7 +231,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     elements.each.with_index(1) do |value, index|
       # An optional group that did not participate in the match is nil.
       value = value.to_s
-      hash_table["$#{index}"] = @capitalize_regex_backreference ? value.capitalize : value
+      hash_table["$#{index}"] = @capitalize_regex_backreference ? capitalize_capture(value) : value
     end
     return hash_table
   end
