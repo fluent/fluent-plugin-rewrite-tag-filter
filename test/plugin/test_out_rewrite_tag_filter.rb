@@ -14,6 +14,11 @@ class RewriteTagFilterTestCollectOutput < Fluent::Plugin::Output
   def process(tag, es)
     es.each { |_time, record| self.class.events << [@name, tag, record] }
   end
+
+  # Some tests configure two workers, and Fluentd checks this for an output in <store> of out_copy.
+  def multi_workers_ready?
+    true
+  end
 end
 
 # An output that fails, to see what happens when a later plugin fails to handle the re-emitted events.
@@ -205,20 +210,14 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
   end
 
   sub_test_case "configure checks" do
-    BROKEN_SETTING = "The next major version will stop the startup"
-
-    # The block returns a driver or a plugin.
-    def broken_warnings
-      warnings_of(yield).select { |l| l.include?(BROKEN_SETTING) }
-    end
-
+    # The block configures the plugin.
     def assert_broken(message = //, &block)
-      warnings = broken_warnings(&block)
-      assert_true(warnings.any? { |l| l.match?(message) }, warnings.inspect)
+      error = assert_raise(Fluent::ConfigError, &block)
+      assert_match(message, error.message)
     end
 
     def assert_not_broken(&block)
-      assert_equal([], broken_warnings(&block))
+      assert_nothing_raised(&block)
     end
 
     # The test driver replaces the routers, so configure the plugin directly. directive is the section that the plugin
@@ -241,23 +240,24 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       end
     end
 
-    # They are only warned, so that a minor update does not stop Fluentd. The next major version will stop the startup.
-    sub_test_case "settings that are certainly broken" do
+    sub_test_case "settings that are certainly broken stop the startup" do
       data(
         "${tag_parts[a..b]}"           => "t.${tag_parts[0..1]}",
         "${tag_parts[a...b]}"          => "t.${tag_parts[0...1]}",
         "__TAG_PARTS[a..b]__"          => "t.__TAG_PARTS[0..1]__",
         "two-digit range"              => "t.${tag_parts[0..10]}",
+        "both forms"                   => "t.${tag_parts[0..1]}.__TAG_PARTS[0..1]__",
         "both forms, two-digit range"  => "t.${tag_parts[0..10]}.__TAG_PARTS[0..10]__",
       )
       test "range of tag_parts" do |tag|
-        d = create_driver(rule_conf(tag: tag))
-        assert_broken(/does not support range/) { d }
-        assert_equal([], warnings_of(d).grep(/not a supported placeholder/))
+        plugin = Fluent::Plugin::RewriteTagFilterOutput.new
+        assert_broken(/does not support range/) { plugin.configure(Fluent::Config.parse(rule_conf(tag: tag), "(test)", "(test_dir)", syntax: :v1)) }
+        assert_equal([], warnings_of(plugin).grep(/not a supported placeholder/))
       end
 
-      test "a range in both forms stops the startup as before" do
-        assert_raise(Fluent::ConfigError) { create_driver(rule_conf(tag: "t.${tag_parts[0..1]}.__TAG_PARTS[0..1]__")) }
+      test "all the broken settings are reported at once" do
+        rules = rule_conf(tag: "t.${tag_parts[0..1]}") + rule_conf(key: "other", tag: "new.${tag}", label: "@UNDEFINED")
+        assert_broken(/does not support range.*\. label @UNDEFINED is not defined\. .* key="other" tag="new\.\$\{tag\}"\z/m) { configure_in("store", rules) }
       end
 
       test "text that a token takes is not a range" do
@@ -279,7 +279,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
         end
 
         test "undefined label" do
-          assert_broken(/label @UNDEFINED is not defined\. Define <label @UNDEFINED> or fix the label of the rule\. The next major version will stop the startup with this setting key="message" tag="new\.\$\{tag\}"/) do
+          assert_broken(/label @UNDEFINED is not defined\. Define <label @UNDEFINED> or fix the label of the rule key="message" tag="new\.\$\{tag\}"/) do
             configure_in("store", rule_conf(tag: "new.${tag}", label: "@UNDEFINED"))
           end
         end
