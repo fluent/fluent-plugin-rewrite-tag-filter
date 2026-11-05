@@ -298,6 +298,24 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
             assert_not_broken { configure_in("match input.**", rule_conf(tag: "new.${tag}", label: "@ERROR"), context: app.event_router) }
           end
         end
+
+        # As in a test that sets context_router without Fluent::Test.setup. No label can be looked up then.
+        data(
+          "undefined label" => "@UNDEFINED",
+          "@ERROR"          => "@ERROR",
+        )
+        test "the label is not checked without a root agent" do |label|
+          root = Fluent::Engine.root_agent
+          Fluent::Engine.instance_variable_set(:@root_agent, nil)
+          plugin = nil
+          begin
+            assert_nothing_raised { plugin = configure_in("match input.**", rule_conf(tag: "new.${tag}", label: label), context: root.event_router) }
+          ensure
+            # The teardown deletes @DEFINED from the root agent.
+            Fluent::Engine.instance_variable_set(:@root_agent, root)
+          end
+          assert_equal([], warnings_of(plugin))
+        end
       end
     end
 

@@ -275,9 +275,10 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     end
 
     # @ERROR is set up after the other <label> sections are configured and before the top level, so it can be looked up
-    # only from the top level.
+    # only from the top level. Without a root agent, as in a test that does not call Fluent::Test.setup, no label can
+    # be looked up.
     label = rule.label
-    if label && !label.empty? && label != '@ROOT' && (label != Fluent::RootAgent::ERROR_LABEL || top_level?)
+    if label && !label.empty? && label != '@ROOT' && !Fluent::Engine.root_agent.nil? && (label != Fluent::RootAgent::ERROR_LABEL || top_level?)
       begin
         event_emitter_router(label)
       rescue ArgumentError
