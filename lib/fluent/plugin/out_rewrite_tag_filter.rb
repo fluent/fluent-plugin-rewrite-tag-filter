@@ -39,19 +39,9 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   # name between double underscores in another case. Other text between double underscores is a plain tag.
   PLACEHOLDER_LIKE_REGEXP = /\${[^}\0]*}|__(?:tag|hostname|tag_parts\[[^\]\0]*\])__/i
   TAG_PARTS_RANGE_REGEXP = /\${tag_parts\[[0-9]+\.\.\.?[0-9]+\]}|__TAG_PARTS\[[0-9]+\.\.\.?[0-9]+\]__/
-  UNCHANGED_TAG_TEMPLATES = ['${tag}', '__TAG__'].freeze
 
   def configure(conf)
     super
-
-    # check_rule reads @remove_tag_regexp.
-    if @remove_tag_prefix && @remove_tag_regexp
-      raise Fluent::ConfigError, "remove_tag_prefix and remove_tag_regexp are exclusive"
-    end
-
-    unless @remove_tag_prefix.nil?
-      @remove_tag_regexp = /^#{Regexp.escape(@remove_tag_prefix)}\.?/
-    end
 
     @rewriterules = []
     rewriterule_names = []
@@ -61,13 +51,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     uses_hostname = @rules.any? { |rule| rule.tag.include?('${hostname}') || rule.tag.include?('__HOSTNAME__') }
     @hostname = uses_hostname ? `#{@hostname_command}`.chomp : ''
 
-    # Only a plugin in <match> knows the pattern that routed events here. A plugin in <store> of out_copy does not.
-    # <match> without a pattern is the same as <match **>.
-    match_pattern = (conf.arg.empty? ? '**' : conf.arg) if conf.name == 'match'
-
     @rules.each do |rule|
-      check_rule(rule, rule.label)
-      check_loop(rule, rule.label, match_pattern) if match_pattern
+      check_rule(rule)
 
       invert = rule.invert ? MATCH_OPERATOR_EXCLUDE : ""
       @rewriterules.push([record_accessor_create(rule.key), rule.pattern, invert, rule.tag, rule.label])
@@ -86,6 +71,14 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
     unless @rewriterules.length == rewriterule_names.uniq.length
       raise Fluent::ConfigError, "duplicated rewriterules found #{@rewriterules.inspect}"
+    end
+
+    if @remove_tag_prefix && @remove_tag_regexp
+      raise Fluent::ConfigError, "remove_tag_prefix and remove_tag_regexp are exclusive"
+    end
+
+    unless @remove_tag_prefix.nil?
+      @remove_tag_regexp = /^#{Regexp.escape(@remove_tag_prefix)}\.?/
     end
 
     @batch_mode = @emit_mode == :batch
@@ -268,7 +261,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
   # Settings that are certainly broken are reported with report_broken_setting.
   # Settings that may not do what the user meant are reported with a warning.
-  def check_rule(rule, label)
+  def check_rule(rule)
     # Before the warnings were added, a wrong condition stopped the startup only when a range was used in both forms
     # with one-digit numbers. Such a config has never started, so keep stopping it.
     if rule.tag =~ /\$\{tag_parts\[\d\.\.\.?\d\]\}/ && rule.tag =~ /__TAG_PARTS\[\d\.\.\.?\d\]__/
@@ -283,6 +276,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
     # @ERROR is set up after the other <label> sections are configured and before the top level, so it can be looked up
     # only from the top level.
+    label = rule.label
     if label && !label.empty? && label != '@ROOT' && (label != Fluent::RootAgent::ERROR_LABEL || top_level?)
       begin
         event_emitter_router(label)
@@ -294,17 +288,6 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
         else
           report_broken_setting message, key: rule.key, tag: rule.tag
         end
-      end
-    end
-
-    # An event with the unchanged tag is skipped when the rule has no label, but re-emitted when it has one, even
-    # label "", which sends it to the router of this plugin.
-    if label && unchanged_tag?(rule) && @remove_tag_regexp.nil? && comes_back?(label)
-      message = "the rule re-emits events with the unchanged tag to label #{label.empty? ? '""' : label}, which routes them back to this plugin"
-      if filtered_before?
-        log.warn "rewrite_tag_filter: #{message}. They come back until a <filter> changes them so that another rule matches, or until SystemStackError is raised", key: rule.key, tag: rule.tag
-      else
-        report_broken_setting message, key: rule.key, tag: rule.tag
       end
     end
 
@@ -333,11 +316,6 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     end
   end
 
-  # Fluentd strips the spaces around a value that is not quoted. A quoted tag with spaces changes the tag.
-  def unchanged_tag?(rule)
-    UNCHANGED_TAG_TEMPLATES.include?(rule.tag)
-  end
-
   # Appending an empty alternative makes the pattern match an empty string, so the captures can be counted without
   # a sample. The newline ends a comment in the extended mode.
   def capture_group_count(pattern)
@@ -350,84 +328,6 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   def top_level?
     root = Fluent::Engine.root_agent
     !context_router.nil? && !root.nil? && context_router.equal?(root.event_router)
-  end
-
-  # The router of the routing that this <match> is in. It is nil when the plugin is configured without Fluentd running,
-  # as in a test that does not call Fluent::Test.setup.
-  def own_router
-    return context_router unless context_router.nil?
-    root = Fluent::Engine.root_agent
-    root.nil? ? nil : root.event_router
-  end
-
-  # Whether events re-emitted to the label go to the routing that this <match> is in.
-  def comes_back?(label)
-    own = own_router
-    # Not get_router: EventEmitter#router sets the caller of the shared router.
-    target = label.nil? || label.empty? ? @router : event_emitter_router(label)
-    !own.nil? && target.equal?(own)
-  rescue ArgumentError
-    # The label is not defined, or it is @ERROR that is not set up yet.
-    false
-  end
-
-  # Fluentd routes an event to the first <match> that covers its tag. The router knows only the sections before this
-  # <match> here. A <filter> does not stop the routing, so it is not counted.
-  # The routing rules added before this plugin, or nil when they cannot be read. They are not public, so if a Fluentd
-  # version keeps them elsewhere or in another form, the callers do not report a working config as broken.
-  # EventRouter#match cannot be used here: it caches the result before the later sections are added.
-  def rules_before
-    rules = own_router.instance_variable_get(:@match_rules)
-    rules if rules.is_a?(Array) && rules.all? { |r| r.respond_to?(:match?) && r.respond_to?(:collector) }
-  end
-
-  def caught_before?(tag)
-    rules = rules_before
-    rules.nil? || rules.any? { |r| r.match?(tag) && !r.collector.is_a?(Fluent::Plugin::Filter) }
-  end
-
-  # A <filter> before this plugin may change the records, so that another rule matches them when they come back.
-  # Without a tag, any <filter> counts: the tag of the incoming events is not known. When the rules cannot be read, a
-  # <filter> may be there, so a working config is not reported as broken.
-  def filtered_before?(tag = nil)
-    rules = rules_before
-    rules.nil? || rules.any? { |r| r.collector.is_a?(Fluent::Plugin::Filter) && (tag.nil? || r.match?(tag)) }
-  end
-
-  # A re-emitted event whose tag routes back to this <match> hits the same rule again, because the record is unchanged.
-  # A tag that depends on neither the record nor the incoming tag is then rewritten to the same tag again,
-  # so it is a broken setting. Otherwise check one sample and warn.
-  def check_loop(rule, label, match_pattern)
-    return unless comes_back?(label)
-    # Without remove_tag_prefix and remove_tag_regexp, ${tag} keeps the tag. Such an event is skipped without label,
-    # and reported by check_rule with label. With them, ${tag} is checked below like the other placeholders.
-    return if unchanged_tag?(rule) && @remove_tag_regexp.nil?
-
-    tokens = rule.tag.scan(TAG_TOKEN_REGEXP)
-    variable = tokens.any? { |backreference, placeholder| backreference ? !rule.invert : placeholder =~ KNOWN_PLACEHOLDER_REGEXP && placeholder =~ /\A(?:\${tag|__TAG)/ }
-    sample_tag = ''
-    if variable
-      # A sample incoming tag made from the first glob pattern. A regexp pattern gives no sample.
-      sample_tag = match_pattern.split(/\s+/).find { |pattern| !pattern.start_with?('/') }
-      return if sample_tag.nil?
-      sample_tag = sample_tag.gsub(/\*\*?/, 'x').gsub(/\{([^,}]*)[^}]*\}/, '\\1')
-    end
-    placeholder = get_placeholder(sample_tag)
-    new_tag = rule.tag.gsub(TAG_TOKEN_REGEXP) { $1 ? (rule.invert ? $1 : 'x') : placeholder[$2].to_s }
-
-    return if caught_before?(new_tag) || !Fluent::EventRouter::Rule.new(match_pattern, nil).match?(new_tag)
-
-    # A <filter> before this <match> for the new tag may change the records, so that another rule matches them when they
-    # come back. A fixed tag is not certainly broken then.
-    if variable || filtered_before?(new_tag)
-      log.warn "rewrite_tag_filter: a re-emitted event may come back to this <match>, and be dropped, or come back again and again until SystemStackError is raised. Use a tag that this <match> does not cover, or a label that does not route back to it", key: rule.key, tag: rule.tag, example: new_tag
-    elsif label.nil?
-      # Without a label, the events are only dropped. A rule may be meant for it: an event whose tag is already the new tag
-      # is not re-emitted, as the README says, so it is only warned.
-      log.warn "rewrite_tag_filter: the events for the rule are dropped: tag #{new_tag} comes back to this <match>, and an event whose tag is already #{new_tag} is not re-emitted. Use a tag that this <match> does not cover, or a label that does not route back to it", key: rule.key, tag: rule.tag
-    else
-      report_broken_setting "the rule re-emits events with tag #{new_tag}, which comes back to this <match> and is re-emitted again and again until SystemStackError is raised. Use a tag that this <match> does not cover, or a label that does not route back to it", key: rule.key, tag: rule.tag
-    end
   end
 
   # A config that has kept Fluentd running must not stop the startup after a minor update,

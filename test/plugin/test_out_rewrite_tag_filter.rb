@@ -199,8 +199,8 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
     end
 
     # The test driver replaces the routers, so configure the plugin directly. directive is the section that the plugin
-    # is in: check_loop runs only in <match>, so "store" checks the rules without it.
-    # context is the router of the section that the <match> is in, such as a <label>.
+    # is in, such as "store" for <store> of out_copy. context is the router of the section that the <match> is in, such
+    # as a <label>.
     def configure_in(directive, rules, context: nil)
       conf = Fluent::Config.parse("<#{directive}>\n#{rules}\n</#{directive.split.first}>", "(test)", "(test_dir)", syntax: :v1).elements.first
       plugin = Fluent::Plugin::RewriteTagFilterOutput.new
@@ -244,58 +244,6 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
 
       test "a range is reported with the key and the tag" do
         assert_broken(/does not support range specify\. The next major version will stop the startup with this setting key="message" tag="t\.\$\{tag_parts\[0\.\.1\]\}"$/) { create_driver(rule_conf(tag: "t.${tag_parts[0..1]}")) }
-      end
-
-      data(
-        "label @ROOT and ${tag}"  => ["@ROOT", "${tag}"],
-        "label @ROOT and __TAG__" => ["@ROOT", "__TAG__"],
-      )
-      test "re-emitting the unchanged tag back to the routing of this <match>" do |(label, tag)|
-        assert_broken(/unchanged tag/) { configure_in("match input.**", rule_conf(tag: tag, label: label)) }
-      end
-
-      test "re-emitting the unchanged tag back is only warned after a <filter>, which may change the records" do
-        Fluent::Engine.root_agent.event_router.add_rule("**", Class.new(Fluent::Plugin::Filter) { def filter(_tag, _time, record) record end }.new)
-        plugin = nil
-        assert_not_broken { plugin = configure_in("match input.**", rule_conf(tag: "${tag}", label: "@ROOT")) }
-        assert_warned(plugin, 'They come back until a <filter> changes them so that another rule matches, or until SystemStackError is raised key="message" tag="${tag}"')
-      end
-
-      test "re-emitting the unchanged tag to the label that this <match> is in" do
-        with_label("@APP") do |app|
-          assert_broken(/unchanged tag/) do
-            configure_in("match input.**", rule_conf(tag: "${tag}", label: "@APP"), context: app.event_router)
-          end
-        end
-      end
-
-      data(
-        "no label"                   => [nil, "${tag}", ""],
-        'label "" with @label'      => ['""', "${tag}", "@label @OTHER"],
-        "label @ROOT with a new tag" => ["@ROOT", "new.${tag}", ""],
-        "remove_tag_prefix"          => ["@ROOT", "${tag}", "remove_tag_prefix input"],
-        "another label"              => ["@OTHER", "${tag}", ""],
-        "quoted tag with a space"    => ["@ROOT", '" ${tag}"', ""],
-      )
-      test "the tag can change or the label is another one" do |(label, tag, head)|
-        with_label("@OTHER") do
-          assert_not_broken { configure_in("match input.**", rule_conf(tag: tag, label: label, head: head)) }
-        end
-      end
-
-      # label "" sends the event to the router of this plugin, which is the routing of a <match> at the top level.
-      test 're-emitting the unchanged tag with label ""' do
-        assert_broken(/unchanged tag to label "", which routes them back to this plugin\. The next major version will stop the startup with this setting key="message" tag="\$\{tag\}"/) do
-          configure_in("match input.**", rule_conf(tag: "${tag}", label: '""'))
-        end
-      end
-
-      test "label @ROOT from a <match> in a <label> does not come back" do
-        with_label("@APP") do |app|
-          assert_not_broken do
-            configure_in("match input.**", rule_conf(tag: "${tag}", label: "@ROOT"), context: app.event_router)
-          end
-        end
       end
 
       sub_test_case "label" do
@@ -403,112 +351,6 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       test "no warning for a valid rule" do |(tag, pattern)|
         d = create_driver(rule_conf(tag: tag, pattern: pattern, head: "hostname_command echo host"))
         assert_equal([], warnings_of(d))
-      end
-    end
-
-    sub_test_case "a re-emitted event that comes back to the same <match>" do
-      data(
-        "fixed tag"                  => ["match kubernetes.**",     "kubernetes.default", nil],
-        "backreference of invert"    => ["match kubernetes.**",     "kubernetes.$1",      nil, true],
-        "one of several patterns"    => ["match a.** kubernetes.**", "kubernetes.default", nil],
-        "regexp pattern"             => ["match /^kubernetes\\..+$/", "kubernetes.default", nil],
-        "match everything"           => ["match **",                "clear",              nil],
-        "<match> without a pattern"  => ["match",                   "clear",              nil],
-      )
-      test "fixed tag without a label is only warned, because its events are only dropped" do |(directive, tag, label, invert)|
-        plugin = nil
-        assert_not_broken { plugin = configure_in(directive, rule_conf(tag: tag, label: label, invert: invert || false)) }
-        assert_warned(plugin, "the events for the rule are dropped: tag #{tag} comes back to this <match>")
-      end
-
-      test "fixed tag that is the incoming tag, to drop some events, is only warned" do
-        plugin = nil
-        conf = rule_conf(pattern: "/^\\/health/", tag: "app.access") + rule_conf(pattern: "/./", tag: "processed.access")
-        assert_not_broken { plugin = configure_in("match app.access", conf) }
-        assert_warned(plugin, "an event whose tag is already app.access is not re-emitted")
-      end
-
-      data("label @ROOT" => "@ROOT", 'label ""' => '""')
-      test "fixed tag with a label that comes back is re-emitted until SystemStackError" do |label|
-        assert_broken(/comes back to this <match> and is re-emitted again and again until SystemStackError is raised\. .*does not route back to it\. The next major version will stop the startup with this setting key="message" tag="kubernetes\.default"/) do
-          configure_in("match kubernetes.**", rule_conf(tag: "kubernetes.default", label: label))
-        end
-      end
-
-      test "an earlier <filter> for another tag does not change it" do
-        Fluent::Engine.root_agent.event_router.add_rule("other.**", Class.new(Fluent::Plugin::Filter) { def filter(_tag, _time, record) record end }.new)
-        assert_broken(/comes back to this <match>/) { configure_in("match kubernetes.**", rule_conf(tag: "kubernetes.default", label: "@ROOT")) }
-      end
-
-      test "an earlier <filter> for the re-emitted tag may change the records, so it is only warned" do
-        Fluent::Engine.root_agent.event_router.add_rule("**", Class.new(Fluent::Plugin::Filter) { def filter(_tag, _time, record) record end }.new)
-        plugin = nil
-        assert_not_broken { plugin = configure_in("match kubernetes.**", rule_conf(tag: "kubernetes.default")) }
-        assert_warned(plugin, "a re-emitted event may come back to this <match>, and be dropped, or come back again and again until SystemStackError is raised")
-        assert_warned(plugin, "or a label that does not route back to it")
-      end
-
-      test "an unknown placeholder that starts with ${tag or __TAG does not make the tag change" do
-        assert_broken(/comes back to this <match> and is re-emitted again and again/) { configure_in("match kubernetes.**", rule_conf(tag: "kubernetes.__TAGX__", label: "@ROOT")) }
-      end
-
-      test "@label of the plugin sends the re-emitted event to another label" do
-        with_label("@K8S") do
-          assert_not_broken { configure_in("match kubernetes.**", "@label @K8S\n" + rule_conf(tag: "kubernetes.default")) }
-        end
-      end
-
-      data(
-        "#120: backreference"       => ["match kubernetes.**", "kubernetes.$1"],
-        "tag placeholder"           => ["match **",            "new.${tag}"],
-        "tag_parts placeholder"     => ["match app.*",         "app.${tag_parts[1]}x"],
-        "${tag} with remove_tag_prefix" => ["match **",        "${tag}", "remove_tag_prefix app"],
-        "glob pattern after a regexp"   => ["match /^raw$/ app.**", "app.$1"],
-      )
-      test "tag that depends on the record or the incoming tag is warned" do |(directive, tag, head)|
-        assert_warned(configure_in(directive, rule_conf(tag: tag, head: head.to_s)), "may come back to this <match>")
-      end
-
-      data(
-        "tag this <match> does not cover" => ["match kubernetes.**", "other.default", nil, nil],
-        "README: nested attributes"       => ["match kubernetes.**", "$1.${tag}", nil, nil],
-        "README: remove_tag_prefix"       => ["match apache.access", "rewritten.${tag}.$2$1", nil, "remove_tag_prefix apache"],
-        "${tag} leaves this <match>"      => ["match app.**",        "${tag}",             nil, "remove_tag_prefix app"],
-        "another label"                   => ["match kubernetes.**", "kubernetes.default", "@OTHER", nil],
-        "regexp pattern, backreference"   => ["match /^kubernetes\\..+$/", "kubernetes.$1", nil, nil],
-        "<store> of out_copy"             => ["store",               "kubernetes.default", nil, nil],
-      )
-      test "no error and no warning" do |(directive, tag, label, head)|
-        plugin = with_label("@OTHER") { configure_in(directive, rule_conf(tag: tag, label: label, head: head.to_s)) }
-        assert_equal([], warnings_of(plugin))
-      end
-
-      data(
-        "missing"         => :missing,
-        "another element" => :another_element,
-      )
-      test "the check is skipped when the rules of the router cannot be read" do |change|
-        router = Fluent::Engine.root_agent.event_router
-        if change == :missing
-          router.remove_instance_variable(:@match_rules)
-        else
-          router.instance_variable_set(:@match_rules, [Object.new])
-        end
-        assert_not_broken { configure_in("match kubernetes.**", rule_conf(tag: "kubernetes.default", label: "@ROOT")) }
-        # A <filter> may be before it, so the unchanged tag with a label that comes back is only warned.
-        plugin = nil
-        assert_not_broken { plugin = configure_in("match kubernetes.**", rule_conf(tag: "${tag}", label: "@ROOT")) }
-        assert_warned(plugin, "the rule re-emits events with the unchanged tag to label @ROOT")
-      end
-
-      test "the check is skipped in a test driver without Fluent::Test.setup" do
-        Fluent::Engine.instance_variable_set(:@root_agent, nil)
-        assert_nothing_raised { create_driver(rule_conf(tag: "${tag}", label: "@ROOT")) }
-      end
-
-      test "an earlier <match> catches the re-emitted event" do
-        Fluent::Engine.root_agent.event_router.add_rule("kubernetes.default", Object.new)
-        assert_not_broken { configure_in("match kubernetes.**", rule_conf(tag: "kubernetes.default")) }
       end
     end
   end
