@@ -1127,7 +1127,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
   end
 
   sub_test_case "metrics" do
-    COUNTERS = %w[reemitted_records dropped_unmatched_records dropped_unchanged_tag_records error_records].freeze
+    COUNTERS = %w[reemitted_records dropped_unmatched_records dropped_unchanged_tag_records].freeze
 
     test "the counters are added to the statistics of the output" do
       d = create_driver(rule_conf(tag: "new.${tag}"))
@@ -1136,7 +1136,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_true(stats.key?('emit_records'))
     end
 
-    # Fluentd with its own router. error_records is checked with a loop, in "re-emitted event that comes back to this plugin".
+    # Fluentd with its own router.
     data(EMIT_MODES)
     test "each record is counted by what happened to it" do |mode|
       conf = %[
@@ -1167,7 +1167,6 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
         "reemitted_records" => 2,
         "dropped_unmatched_records" => 1,
         "dropped_unchanged_tag_records" => 1,
-        "error_records" => 0,
       }
       assert_equal(expected, plugin.statistics['output'].slice(*COUNTERS))
       assert_equal(%w[new new], RewriteTagFilterTestCollectOutput.events.map(&:first))

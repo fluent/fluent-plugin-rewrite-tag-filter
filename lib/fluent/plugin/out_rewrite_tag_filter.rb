@@ -86,7 +86,6 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     @reemitted_records_metrics = metrics_create(namespace: "fluentd", subsystem: "rewrite_tag_filter", name: "reemitted_records", help_text: "Number of records re-emitted with a new tag or label")
     @dropped_unmatched_records_metrics = metrics_create(namespace: "fluentd", subsystem: "rewrite_tag_filter", name: "dropped_unmatched_records", help_text: "Number of records dropped because no rule matched")
     @dropped_unchanged_tag_records_metrics = metrics_create(namespace: "fluentd", subsystem: "rewrite_tag_filter", name: "dropped_unchanged_tag_records", help_text: "Number of records dropped because the tag did not change and no label was set")
-    @error_records_metrics = metrics_create(namespace: "fluentd", subsystem: "rewrite_tag_filter", name: "error_records", help_text: "Number of records sent to @ERROR")
   end
 
   # The counters are added to the statistics of the output, which in_monitor_agent shows.
@@ -96,7 +95,6 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       'reemitted_records' => @reemitted_records_metrics.get,
       'dropped_unmatched_records' => @dropped_unmatched_records_metrics.get,
       'dropped_unchanged_tag_records' => @dropped_unchanged_tag_records_metrics.get,
-      'error_records' => @error_records_metrics.get,
     )
     stats
   end

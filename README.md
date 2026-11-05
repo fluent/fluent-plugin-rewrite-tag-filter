@@ -233,9 +233,8 @@ The plugin counts what happens to each record. The counters are totals for each 
 | `reemitted_records` | A record is re-emitted with a new tag or label. A rule with `label @ERROR` counts here. |
 | `dropped_unmatched_records` | No rule matches a record. |
 | `dropped_unchanged_tag_records` | A rule matches, but the tag does not change and no label is set. |
-| `error_records` | This plugin sends a record to `@ERROR` instead of re-emitting it, because it came back to this plugin `max_reemit_depth` times in a row, because it was re-emitted 20 times in a row by the sections of this plugin, or because it came back to a loop that was stopped in the same emit. A record that `out_copy` shares between several stopped passes is counted once. Without `<label @ERROR>`, the error goes back to the input and is not counted. An error that this plugin raises, such as for a label that is not defined, is counted in `num_errors` of the output, not here. |
 
-A record is counted each time it passes through this plugin, so a re-emitted record that comes back to the same `<match>` is counted again. A record that a later plugin fails to handle is counted in `reemitted_records`, not in `error_records`.
+A record is counted each time it passes through this plugin, so a re-emitted record that comes back to the same `<match>` is counted again. A record that a later plugin fails to handle is counted in `reemitted_records`. An error that this plugin raises, such as for a label that is not defined, is counted in `num_errors` of the output.
 
 The counters have no breakdown by tag, because a tag made from a record can take any number of values. To count records by tag, count them where they arrive, for example with fluent-plugin-prometheus.
 
