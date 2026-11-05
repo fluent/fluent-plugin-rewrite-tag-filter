@@ -265,6 +265,7 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
           "defined label" => "@DEFINED",
           "@ERROR"        => "@ERROR",
           "@ROOT"         => "@ROOT",
+          'label ""'      => '""',
         )
         test "label that can be routed" do |label|
           assert_not_broken { configure_in("store", rule_conf(tag: "new.${tag}", label: label)) }

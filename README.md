@@ -58,7 +58,7 @@ For more details, see [Plugin Management](https://docs.fluentd.org/deployment/pl
   The pattern without slashes will cause errors if you use patterns start with character classes.
 * **tag** (string) (required): New tag. A backreference to a capture group that the pattern does not have, such as `$0` or `$3` for a pattern with two groups, expands to an empty string, and a warning is logged at startup (see "Checks at startup").
 * **label** (string) (optional): New label. If specified, label can be changed per-rule.
-  The label must be defined with `<label>` in the configuration (see "Checks at startup").
+  The label must be defined with `<label>` in the configuration (see "Checks at startup"). `label @ROOT` and `label ""` need no `<label>`.
 * **invert** (bool) (optional): If true, rewrite tag when unmatch pattern
   * Default value: `false`
 
@@ -220,7 +220,7 @@ The rules are checked at startup. A setting that may not do what you meant is re
 
 The following settings are certainly broken. They are reported with a warning for now, and the next major version will stop the startup with a configuration error:
 
-- A label that is not defined with `<label>`. The event stream that has a record for it raises the error, so Fluentd sends the whole stream to `@ERROR`, or the error goes back to the input without `<label @ERROR>`. `label @ERROR` is checked only at the top level, in a `<match>` or its `<store>` of `out_copy`, because `@ERROR` is set up after the other `<label>` sections. Define `<label @ERROR>` when a rule uses it. With `workers` more than 1, it is only warned, because a `<label>` in `<worker N>` is set up only in that worker. In `<worker N>`, the label must be defined for that worker.
+- A label that is not defined with `<label>`. `label @ROOT` and `label ""` need no `<label>`. The event stream that has a record for it raises the error, so Fluentd sends the whole stream to `@ERROR`, or the error goes back to the input without `<label @ERROR>`. When the plugin is in `<store ignore_error>` of `out_copy`, `out_copy` can catch the error before Fluentd routes it: it logs the error, and the stream does not go to `@ERROR`. `label @ERROR` is checked only at the top level, in a `<match>` or its `<store>` of `out_copy`, because `@ERROR` is set up after the other `<label>` sections. Define `<label @ERROR>` when a rule uses it. With `workers` more than 1, it is only warned, because a `<label>` in `<worker N>` is set up only in that worker. In `<worker N>`, the label must be defined for that worker.
 - A range in `${tag_parts[n]}` or `__TAG_PARTS[n]__`, such as `${tag_parts[0..2]}`. A tag that has a range with one-digit numbers in both forms, such as `t.${tag_parts[0..1]}.__TAG_PARTS[0..1]__`, already stops the startup, as in the earlier versions.
 
 ### Nested attributes
