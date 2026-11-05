@@ -379,6 +379,10 @@ For example, given this configuration:
   </rule>
 </match>
 
+<match web.apache.access>
+  @type stdout
+</match>
+
 <label @other>
   <match other.**>
     @type stdout
@@ -387,7 +391,7 @@ For example, given this configuration:
 ```
 
 message: `{"domain": "www.example.com"}` will get its tag changed to 
-`web.apache.access`, while message 
+`web.apache.access`, which the second `<match>` catches, while message 
 `{"domain": "api.example.com"}` will get its tag changed to `other.api` and
  be sent to label `@other`, which must be defined with `<label>`.
 
