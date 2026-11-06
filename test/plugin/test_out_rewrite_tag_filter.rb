@@ -672,6 +672,62 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal(events, expected_events)
     end
 
+    test "relabel in batch mode" do
+      conf = %[
+          emit_mode batch
+          <rule>
+            key key
+            pattern /^(odd|one)$/
+            tag $1
+            label odd_label
+          </rule>
+          <rule>
+            key key
+            pattern /^(even)$/
+            tag shared
+            label even_label
+          </rule>
+          <rule>
+            key key
+            pattern /^(.*)$/
+            tag $1
+          </rule>
+        ]
+      time = event_time
+      d = create_driver(conf)
+      # The router of each label is looked up once, and the events are emitted per label and tag.
+      mock.proxy(d.instance).get_router("odd_label").times(1) do |router|
+        mock.proxy(router).emit_stream("odd", anything).times(1)
+        mock.proxy(router).emit_stream("one", anything).times(1)
+        router
+      end
+      mock.proxy(d.instance).get_router("even_label").times(1) do |router|
+        mock.proxy(router).emit_stream("shared", anything).times(1)
+        router
+      end
+      mock.proxy(d.instance).get_router(nil).times(1)
+      mock.proxy(d.instance.router).emit_stream("zero", anything).times(1)
+      mock.proxy(d.instance.router).emit_stream("shared", anything).times(1)
+      mock.proxy(d.instance.router).emit(anything, anything, anything).times(0)
+      d.run(default_tag: "input") do
+        d.feed([[time, { "key" => "odd", "message" => "message-1" }],
+                [time, { "key" => "even", "message" => "message-2" }],
+                [time, { "key" => "zero", "message" => "message-3" }],
+                [time, { "key" => "one", "message" => "message-4" }],
+                [time, { "key" => "shared", "message" => "message-5" }],
+                [time, { "key" => "odd", "message" => "message-6" }]])
+      end
+      expected_events = [
+        ["odd", time, { "key" => "odd", "message" => "message-1" }],
+        ["odd", time, { "key" => "odd", "message" => "message-6" }],
+        ["one", time, { "key" => "one", "message" => "message-4" }],
+        ["shared", time, { "key" => "even", "message" => "message-2" }],
+        ["zero", time, { "key" => "zero", "message" => "message-3" }],
+        ["shared", time, { "key" => "shared", "message" => "message-5" }],
+      ]
+      assert_equal(expected_events, d.events)
+    end
+
     sub_test_case "emit_mode" do
       test "record" do
         conf = %[
