@@ -17,6 +17,7 @@ This is an output plugin because fluentd's `filter` doesn't allow tag rewrite.
 
 | fluent-plugin-rewrite-tag-filter | Fluentd    | Ruby   |
 |----------------------------------|------------|--------|
+| >= 3.0.0                         | >= v1.14.0 | >= 2.4 |
 | >= 2.0.0                         | >= v0.14.2 | >= 2.1 |
 | < 2.0.0                          | >= v0.12.0 | >= 1.9 |
 
@@ -222,6 +223,32 @@ The following settings are certainly broken. They are reported with a warning fo
 
 - A label that is not defined with `<label>`. `label @ROOT` and `label ""` need no `<label>`. The event stream that has a record for it raises the error, so Fluentd sends the whole stream to `@ERROR`, or the error goes back to the input without `<label @ERROR>`. When the plugin is in `<store ignore_error>` of `out_copy`, `out_copy` can catch the error before Fluentd routes it: it logs the error, and the stream does not go to `@ERROR`. `label @ERROR` is checked only at the top level, in a `<match>` or its `<store>` of `out_copy`, because `@ERROR` is set up after the other `<label>` sections. Define `<label @ERROR>` when a rule uses it. With `workers` more than 1, it is only warned, because a `<label>` in `<worker N>` is set up only in that worker. In `<worker N>`, the label must be defined for that worker.
 - A range in `${tag_parts[n]}` or `__TAG_PARTS[n]__`, such as `${tag_parts[0..2]}`. A tag that has a range with one-digit numbers in both forms, such as `t.${tag_parts[0..1]}.__TAG_PARTS[0..1]__`, already stops the startup, as in the earlier versions.
+
+### Metrics
+
+The plugin counts what happens to each record. The counters are totals for each `<match>`, and `in_monitor_agent` shows them with the other statistics of the plugin, in `/api/plugins.json` and `/api/plugins`. They need Fluentd v1.14.0 or later.
+
+| Name | Counted when |
+|---|---|
+| `reemitted_records` | A record is re-emitted with a new tag or label. A rule with `label @ERROR` counts here. |
+| `dropped_unmatched_records` | No rule matches a record. |
+| `dropped_unchanged_tag_records` | A rule matches, but the tag does not change and no label is set. |
+
+A record is counted each time it passes through this plugin, so a re-emitted record that comes back to the same `<match>` is counted again. A record that a later plugin fails to handle is counted in `reemitted_records`. An error that this plugin raises, such as for a label that is not defined, is counted in `retry_count` of the output, which is `num_errors` of the output in the metrics. Then the records of the event stream are not counted as dropped, because Fluentd sends the whole stream to `@ERROR` or back to the input. With `ignore_error` in `<store>` of `out_copy`, the stream is not sent anywhere, and its records are not counted as dropped either. In both cases, the records that were already re-emitted before the error are counted in `reemitted_records`.
+
+The counters have no breakdown by tag, because a tag made from a record can take any number of values. To count records by tag, count them where they arrive, for example with fluent-plugin-prometheus.
+
+```
+<source>
+  @type monitor_agent
+  bind 127.0.0.1
+  port 24220
+</source>
+```
+
+```
+$ curl -s 'http://localhost:24220/api/plugins.json?type=rewrite_tag_filter'
+```
 
 ### Nested attributes
 
