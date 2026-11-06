@@ -31,7 +31,14 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
   end
 
   MATCH_OPERATOR_EXCLUDE = '!'
+
+  # Backreferences and placeholders, tokenized the same way as expand_tag.
   TAG_TOKEN_REGEXP = /(\$\d+)|(\${[a-z_]+(?:\[[0-9]+\])?}|__TAG_PARTS\[[0-9]+\]__|__[A-Z_]+?__)/
+  KNOWN_PLACEHOLDER_REGEXP = /\A(?:\${tag}|__TAG__|\${hostname}|__HOSTNAME__|\${tag_parts\[(?:0|[1-9][0-9]*)\]}|__TAG_PARTS\[(?:0|[1-9][0-9]*)\]__)\z/
+  # Text that looks like a placeholder but is not tokenized, so it stays in the tag as written: ${...}, or a placeholder
+  # name between double underscores in another case. Other text between double underscores is a plain tag.
+  PLACEHOLDER_LIKE_REGEXP = /\${[^}\0]*}|__(?:tag|hostname|tag_parts\[[^\]\0]*\])__/i
+  TAG_PARTS_RANGE_REGEXP = /\${tag_parts\[[0-9]+\.\.\.?[0-9]+\]}|__TAG_PARTS\[[0-9]+\.\.\.?[0-9]+\]__/
 
   def configure(conf)
     super
@@ -45,9 +52,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     @hostname = uses_hostname ? `#{@hostname_command}`.chomp : ''
 
     @rules.each do |rule|
-      unless rule.tag.match(/\$\{tag_parts\[\d\.\.\.?\d\]\}/).nil? or rule.tag.match(/__TAG_PARTS\[\d\.\.\.?\d\]__/).nil?
-        raise Fluent::ConfigError, "${tag_parts[n]} and __TAG_PARTS[n]__ placeholder does not support range specify at #{rule}"
-      end
+      check_rule(rule)
 
       invert = rule.invert ? MATCH_OPERATOR_EXCLUDE : ""
       @rewriterules.push([record_accessor_create(rule.key), rule.pattern, invert, rule.tag, rule.label])
@@ -253,5 +258,60 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
 
     return result
   end
-end
 
+  # Settings that are certainly broken are reported with report_broken_setting.
+  # Settings that may not do what the user meant are reported with a warning.
+  def check_rule(rule)
+    # Before the warnings were added, a wrong condition stopped the startup only when a range was used in both forms
+    # with one-digit numbers. Such a config has never started, so keep stopping it.
+    if rule.tag =~ /\$\{tag_parts\[\d\.\.\.?\d\]\}/ && rule.tag =~ /__TAG_PARTS\[\d\.\.\.?\d\]__/
+      raise Fluent::ConfigError, "${tag_parts[n]} and __TAG_PARTS[n]__ placeholder does not support range specify at #{rule}"
+    end
+    # The tokens are replaced with a character that cannot be in a placeholder, so the text around them does not join
+    # into a new one, and text that a token takes is not checked as a range.
+    masked_tag = rule.tag.gsub(TAG_TOKEN_REGEXP, "\0")
+    if masked_tag =~ TAG_PARTS_RANGE_REGEXP
+      report_broken_setting "${tag_parts[n]} and __TAG_PARTS[n]__ placeholder does not support range specify", key: rule.key, tag: rule.tag
+    end
+
+    if rule.tag.empty?
+      log.warn "rewrite_tag_filter: the rule rewrites the tag to an empty string", key: rule.key
+    end
+
+    group_count = capture_group_count(rule.pattern)
+    rule.tag.scan(TAG_TOKEN_REGEXP) do |backreference, placeholder|
+      if backreference
+        digits = backreference[1..-1]
+        if rule.invert
+          log.warn "rewrite_tag_filter: an invert rule has no captures, so #{backreference} stays in the tag as written", key: rule.key, tag: rule.tag
+        elsif digits.start_with?('0')
+          log.warn "rewrite_tag_filter: #{backreference} is not a backreference to a capture group, so it expands to an empty string. Backreferences start from $1 without a leading zero", key: rule.key, tag: rule.tag
+        elsif group_count && digits.to_i > group_count
+          log.warn "rewrite_tag_filter: the pattern has #{group_count} capture group(s), so #{backreference} expands to an empty string", key: rule.key, pattern: rule.pattern, tag: rule.tag
+        end
+      elsif placeholder !~ KNOWN_PLACEHOLDER_REGEXP
+        log.warn "rewrite_tag_filter: unknown placeholder #{placeholder} expands to an empty string", key: rule.key, tag: rule.tag
+      end
+    end
+    # A range is reported above, so it is not reported again here.
+    masked_tag.gsub(TAG_PARTS_RANGE_REGEXP, "\0").scan(PLACEHOLDER_LIKE_REGEXP) do |text|
+      log.warn "rewrite_tag_filter: #{text} is not a supported placeholder and stays in the tag as written", key: rule.key, tag: rule.tag
+    end
+  end
+
+  # Appending an empty alternative makes the pattern match an empty string, so the captures can be counted without
+  # a sample. The newline ends a comment in the extended mode.
+  def capture_group_count(pattern)
+    match = Regexp.new("(?:#{pattern.source}\n)|", pattern.options).match("")
+    match.nil? ? nil : match.captures.size
+  rescue RegexpError
+    nil
+  end
+
+  # A config that has kept Fluentd running must not stop the startup after a minor update,
+  # so a certainly broken setting is only warned for now. The next major version will raise Fluent::ConfigError here.
+  # fields are logged after the message, like the other warnings.
+  def report_broken_setting(message, **fields)
+    log.warn "rewrite_tag_filter: #{message}. The next major version will stop the startup with this setting", fields
+  end
+end

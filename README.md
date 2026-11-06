@@ -56,7 +56,7 @@ For more details, see [Plugin Management](https://docs.fluentd.org/deployment/pl
 * **pattern** (regexp) (required): The regular expression.
   `/regexp/` is preferred because `/regexp/` style can support character classes such as `/[a-z]/`.
   The pattern without slashes will cause errors if you use patterns start with character classes.
-* **tag** (string) (required): New tag
+* **tag** (string) (required): New tag. A backreference to a capture group that the pattern does not have, such as `$0` or `$3` for a pattern with two groups, expands to an empty string, and a warning is logged at startup (see "Checks at startup").
 * **label** (string) (optional): New label. If specified, label can be changed per-rule.
 * **invert** (bool) (optional): If true, rewrite tag when unmatch pattern
   * Default value: `false`
@@ -208,6 +208,19 @@ Alternatively, put `record_modifier` or `record_transformer` in front of this pl
 
 A capture from such a value is put into the tag as it is, as before. When it cannot be joined with the rest of the tag, such as for `tag ログ.$1`, the captures that are valid UTF-8 are read as UTF-8. With `capitalize_regex_backreference`, a capture that is valid UTF-8 is capitalized as UTF-8, as it is for a value in UTF-8. This changes the tags from before: `émile` becomes `Émile` instead of `émile`, and `aÉ` becomes `Aé` instead of `AÉ`. Before Ruby 2.4, `String#capitalize` changes only ASCII letters, also in UTF-8, so these tags do not change there. A capture that is not valid UTF-8, such as Latin-1 bytes, has only its ASCII letters changed, as before.
 
+### Checks at startup
+
+The rules are checked at startup. A setting that may not do what you meant is reported with a warning, and Fluentd keeps starting:
+
+- A backreference to a capture group that the pattern does not have, such as `$0`, `$01`, or `$3` for a pattern with two groups. It expands to an empty string.
+- A backreference in an invert rule. An invert rule has no captures, so it stays in the tag as written.
+- Text that looks like a placeholder but is not one (see "Tag placeholder").
+- An empty tag.
+
+The following settings are certainly broken. They are reported with a warning for now, and the next major version will stop the startup with a configuration error:
+
+- A range in `${tag_parts[n]}` or `__TAG_PARTS[n]__`, such as `${tag_parts[0..2]}`. A tag that has a range with one-digit numbers in both forms, such as `t.${tag_parts[0..1]}.__TAG_PARTS[0..1]__`, already stops the startup, as in the earlier versions.
+
 ### Nested attributes
 
 Dot notation:
@@ -279,7 +292,9 @@ It is supported these placeholder for new_tag (rewritten tag).
 The placeholder of `${tag_parts[n]}` and `__TAG_PARTS[n]__` acts accessing the index which split the tag with "." (dot).  
 For example with `td.apache.access` tag, it will get `td` by `${tag_parts[0]}` and `apache` by `${tag_parts[1]}`.
 
-**Note** Currently, range expression ```${tag_parts[0..2]}``` is not supported.
+**Note** Currently, range expression ```${tag_parts[0..2]}``` is not supported. A warning is logged at startup when it is used, and the next major version will stop the startup (see "Checks at startup").
+
+Placeholder names are case-sensitive. A warning is logged at startup when the tag has text that looks like a placeholder but is not one of the above: `${...}`, or `__TAG__`, `__HOSTNAME__` or `__TAG_PARTS[n]__` in another case. Other text between double underscores, such as `app__web__log`, is a plain tag. `${unknown}`, `__UNKNOWN__` and `${tag_parts[01]}` expand to an empty string, and `${TAG}`, `__tag__` and `${tag_parts[-1]}` stay in the tag as written.
 
 #### Placeholder Options
 
