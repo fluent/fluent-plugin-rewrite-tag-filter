@@ -198,6 +198,26 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_equal([], broken_warnings(&block))
     end
 
+    # The test driver replaces the routers, so configure the plugin directly. directive is the section that the plugin
+    # is in, such as "store" for <store> of out_copy. context is the router of the section that the <match> is in, such
+    # as a <label>.
+    def configure_in(directive, rules, context: nil)
+      conf = Fluent::Config.parse("<#{directive}>\n#{rules}\n</#{directive.split.first}>", "(test)", "(test_dir)", syntax: :v1).elements.first
+      plugin = Fluent::Plugin::RewriteTagFilterOutput.new
+      plugin.context_router = context if context
+      plugin.configure(conf)
+      plugin
+    end
+
+    def with_label(name)
+      label = Fluent::Engine.root_agent.add_label(name)
+      begin
+        yield label
+      ensure
+        Fluent::Engine.root_agent.labels.delete(name)
+      end
+    end
+
     # They are only warned, so that a minor update does not stop Fluentd. The next major version will stop the startup.
     sub_test_case "settings that are certainly broken" do
       data(
@@ -224,6 +244,78 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
 
       test "a range is reported with the key and the tag" do
         assert_broken(/does not support range specify\. The next major version will stop the startup with this setting key="message" tag="t\.\$\{tag_parts\[0\.\.1\]\}"$/) { create_driver(rule_conf(tag: "t.${tag_parts[0..1]}")) }
+      end
+
+      sub_test_case "label" do
+        setup do
+          Fluent::Engine.root_agent.add_label("@DEFINED")
+        end
+
+        teardown do
+          Fluent::Engine.root_agent.labels.delete("@DEFINED")
+        end
+
+        test "undefined label" do
+          assert_broken(/label @UNDEFINED is not defined\. Define <label @UNDEFINED> or fix the label of the rule\. The next major version will stop the startup with this setting key="message" tag="new\.\$\{tag\}"/) do
+            configure_in("store", rule_conf(tag: "new.${tag}", label: "@UNDEFINED"))
+          end
+        end
+
+        data(
+          "defined label" => "@DEFINED",
+          "@ERROR"        => "@ERROR",
+          "@ROOT"         => "@ROOT",
+          'label ""'      => '""',
+        )
+        test "label that can be routed" do |label|
+          assert_not_broken { configure_in("store", rule_conf(tag: "new.${tag}", label: label)) }
+        end
+
+        test "undefined label is only warned with several workers, because it may be defined for another worker" do
+          plugin = nil
+          Fluent::SystemConfig.overwrite_system_config("workers" => 2) do
+            assert_not_broken { plugin = configure_in("store", rule_conf(tag: "new.${tag}", label: "@UNDEFINED")) }
+          end
+          assert_warned(plugin, 'It may be defined in <worker> for another worker key="message" tag="new.${tag}"')
+        end
+
+        test "label @ERROR from the top level without <label @ERROR>" do
+          assert_broken(/label @ERROR is not defined/) do
+            configure_in("match input.**", rule_conf(tag: "new.${tag}", label: "@ERROR"), context: Fluent::Engine.root_agent.event_router)
+          end
+        end
+
+        test "label @ERROR from the top level with <label @ERROR>" do
+          with_label("@ERROR") do
+            assert_not_broken do
+              configure_in("match input.**", rule_conf(tag: "new.${tag}", label: "@ERROR"), context: Fluent::Engine.root_agent.event_router)
+            end
+          end
+        end
+
+        test "label @ERROR from a <label> is not checked, because @ERROR is set up later" do
+          with_label("@APP") do |app|
+            assert_not_broken { configure_in("match input.**", rule_conf(tag: "new.${tag}", label: "@ERROR"), context: app.event_router) }
+          end
+        end
+
+        # As in a test that sets context_router without Fluent::Test.setup. No label can be looked up then.
+        data(
+          "undefined label" => "@UNDEFINED",
+          "@ERROR"          => "@ERROR",
+        )
+        test "the label is not checked without a root agent" do |label|
+          root = Fluent::Engine.root_agent
+          Fluent::Engine.instance_variable_set(:@root_agent, nil)
+          plugin = nil
+          begin
+            assert_nothing_raised { plugin = configure_in("match input.**", rule_conf(tag: "new.${tag}", label: label), context: root.event_router) }
+          ensure
+            # The teardown deletes @DEFINED from the root agent.
+            Fluent::Engine.instance_variable_set(:@root_agent, root)
+          end
+          assert_equal([], warnings_of(plugin))
+        end
       end
     end
 

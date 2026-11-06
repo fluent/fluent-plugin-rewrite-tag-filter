@@ -274,6 +274,24 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       report_broken_setting "${tag_parts[n]} and __TAG_PARTS[n]__ placeholder does not support range specify", key: rule.key, tag: rule.tag
     end
 
+    # @ERROR is set up after the other <label> sections are configured and before the top level, so it can be looked up
+    # only from the top level. Without a root agent, as in a test that does not call Fluent::Test.setup, no label can
+    # be looked up.
+    label = rule.label
+    if label && !label.empty? && label != '@ROOT' && !Fluent::Engine.root_agent.nil? && (label != Fluent::RootAgent::ERROR_LABEL || top_level?)
+      begin
+        event_emitter_router(label)
+      rescue ArgumentError
+        message = "label #{label} is not defined. Define <label #{label}> or fix the label of the rule"
+        if system_config.workers > 1
+          # A <label> in <worker N> is set up only in that worker, and the rule may get no records in the other workers.
+          log.warn "rewrite_tag_filter: #{message}. It may be defined in <worker> for another worker", key: rule.key, tag: rule.tag
+        else
+          report_broken_setting message, key: rule.key, tag: rule.tag
+        end
+      end
+    end
+
     if rule.tag.empty?
       log.warn "rewrite_tag_filter: the rule rewrites the tag to an empty string", key: rule.key
     end
@@ -306,6 +324,11 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     match.nil? ? nil : match.captures.size
   rescue RegexpError
     nil
+  end
+
+  def top_level?
+    root = Fluent::Engine.root_agent
+    !context_router.nil? && !root.nil? && context_router.equal?(root.event_router)
   end
 
   # A config that has kept Fluentd running must not stop the startup after a minor update,
