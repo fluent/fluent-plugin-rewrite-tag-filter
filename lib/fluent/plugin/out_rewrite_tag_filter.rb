@@ -177,9 +177,9 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       record_accessor.call(record)
     rescue TypeError => e
       # A nested key whose parent cannot be read with the next key, such as $.log.level for {"log": "text"} or
-      # {"log": ["x"]}, is treated as a missing key. Accessor#keys is an Array only for a nested key. Other errors, such
-      # as a top-level key for a record that is not a Hash, are raised as before.
-      raise unless record.is_a?(Hash) && record_accessor.keys.is_a?(Array)
+      # {"log": ["x"]}, is treated as a missing key. A top-level key does not raise TypeError for a plain Hash.
+      # Other errors, such as a top-level key for a record that is not a Hash, are raised as before.
+      raise unless record.is_a?(Hash)
       warn_unreadable_key(record_accessor, e)
       nil
     end
