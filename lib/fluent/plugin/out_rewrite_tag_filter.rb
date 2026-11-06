@@ -39,6 +39,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     @rewriterules = []
     rewriterule_names = []
     @rule_keys = {}
+    @nested_keys = {}
     @unreadable_key_warned = {}
     # The command does not run when no rule uses the hostname, so a missing command does not stop the startup.
     uses_hostname = @rules.any? { |rule| rule.tag.include?('${hostname}') || rule.tag.include?('__HOSTNAME__') }
@@ -52,6 +53,8 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       invert = rule.invert ? MATCH_OPERATOR_EXCLUDE : ""
       @rewriterules.push([record_accessor_create(rule.key), rule.pattern, invert, rule.tag, rule.label])
       @rule_keys[@rewriterules.last.first] = rule.key
+      # A key starting with $. or $[ is nested, as Fluentd's Accessor.parse_parameter decides.
+      @nested_keys[@rewriterules.last.first] = rule.key.start_with?('$.', '$[')
       rewriterule_names.push([rule.key, invert, rule.pattern.to_s])
       log.info "adding rewrite_tag_filter rule: #{rule.key} #{@rewriterules.last}"
     end
@@ -177,9 +180,9 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
       record_accessor.call(record)
     rescue TypeError => e
       # A nested key whose parent cannot be read with the next key, such as $.log.level for {"log": "text"} or
-      # {"log": ["x"]}, is treated as a missing key. Accessor#keys is an Array only for a nested key. Other errors, such
-      # as a top-level key for a record that is not a Hash, are raised as before.
-      raise unless record.is_a?(Hash) && record_accessor.keys.is_a?(Array)
+      # {"log": ["x"]}, is treated as a missing key. Other errors, such as a top-level key for a record that is not a
+      # Hash, are raised as before. Accessor#keys is not used for this because Fluentd 1.0 has no reader for it.
+      raise unless record.is_a?(Hash) && @nested_keys[record_accessor]
       warn_unreadable_key(record_accessor, e)
       nil
     end

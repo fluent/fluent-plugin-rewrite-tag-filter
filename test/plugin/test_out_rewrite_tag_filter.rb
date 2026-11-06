@@ -843,6 +843,17 @@ class RewriteTagFilterOutputTest < Test::Unit::TestCase
       assert_match(/key="\$\.log\.name"/, warnings[1])
     end
 
+    # Accessor#keys was added in Fluentd 1.1.0, so Fluentd 1.0 has no reader for it.
+    test "is treated as a missing key when the accessor has no keys reader" do
+      d = create_driver(rule_conf(key: "$.log.level", pattern: "/^x$/", tag: "not_x", invert: true))
+      d.instance.instance_variable_get(:@rewriterules).each do |accessor, *|
+        accessor.singleton_class.send(:undef_method, :keys) if accessor.respond_to?(:keys)
+      end
+      d.run(default_tag: "input") { 2.times { d.feed({ "log" => "plain" }) } }
+      assert_equal(["not_x", "not_x"], d.events.map(&:first))
+      assert_equal(1, d.logs.grep(/a parent in the nested key cannot be read/).size)
+    end
+
     test "a record that is not a Hash still raises the error as before" do
       d = create_driver(rule_conf(key: "message", pattern: "/(?!)/", tag: "other", invert: true))
       es = Fluent::MultiEventStream.new
