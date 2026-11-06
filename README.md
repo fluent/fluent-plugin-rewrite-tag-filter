@@ -17,8 +17,8 @@ This is an output plugin because fluentd's `filter` doesn't allow tag rewrite.
 
 | fluent-plugin-rewrite-tag-filter | Fluentd    | Ruby   |
 |----------------------------------|------------|--------|
-| >= 3.0.0                         | >= v1.14.0 | >= 2.4 |
-| >= 2.0.0                         | >= v0.14.2 | >= 2.1 |
+| >= 3.0.0                         | >= v1.14.0 | >= 3.2 |
+| 2.x                              | >= v0.14.2 | >= 2.1 |
 | < 2.0.0                          | >= v0.12.0 | >= 1.9 |
 
 ## Installation

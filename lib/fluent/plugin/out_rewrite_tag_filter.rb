@@ -179,8 +179,7 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     rescue Encoding::CompatibilityError
       raise unless backreference_table
       unknown.clear
-      # Not Hash#transform_values, which needs Ruby 2.4: Fluentd up to 1.8 runs on Ruby 2.1.
-      utf8_table = backreference_table.map { |key, value| [key, binary_as_utf8(value)] }.to_h
+      utf8_table = backreference_table.transform_values { |value| binary_as_utf8(value) }
       expand_tag_once(rewritetag, utf8_table, placeholder, unknown)
     end
   ensure
