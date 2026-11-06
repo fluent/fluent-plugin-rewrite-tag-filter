@@ -15,10 +15,11 @@ This is an output plugin because fluentd's `filter` doesn't allow tag rewrite.
 
 ## Requirements
 
-| fluent-plugin-rewrite-tag-filter | Fluentd    | Ruby   |
-|----------------------------------|------------|--------|
-| >= 2.0.0                         | >= v0.14.2 | >= 2.1 |
-| < 2.0.0                          | >= v0.12.0 | >= 1.9 |
+| fluent-plugin-rewrite-tag-filter | Fluentd     | Ruby   |
+|----------------------------------|-------------|--------|
+| >= 2.1.0                         | >= v1.0.1   | >= 2.1 |
+| 2.0.x                            | >= v0.14.20 | >= 2.1 |
+| < 2.0.0                          | >= v0.12.0  | >= 1.9 |
 
 ## Installation
 
