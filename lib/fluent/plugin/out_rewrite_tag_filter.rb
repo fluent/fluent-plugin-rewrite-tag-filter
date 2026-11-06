@@ -51,14 +51,30 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     uses_hostname = @rules.any? { |rule| rule.tag.include?('${hostname}') || rule.tag.include?('__HOSTNAME__') }
     @hostname = uses_hostname ? `#{@hostname_command}`.chomp : ''
 
+    @broken_settings = []
     @rules.each do |rule|
       check_rule(rule)
 
       invert = rule.invert ? MATCH_OPERATOR_EXCLUDE : ""
-      @rewriterules.push([record_accessor_create(rule.key), rule.pattern, invert, rule.tag, rule.label])
+      begin
+        accessor = record_accessor_create(rule.key)
+      rescue Fluent::ConfigError => e
+        # Reported with the broken settings, so they can be fixed at once.
+        report_broken_setting e.message, key: rule.key
+        next
+      rescue ArgumentError => e
+        # Fluentd raises ArgumentError from Integer() for an index that is not an integer, such as $.a[x].
+        raise unless e.message.start_with?('invalid value for Integer()')
+        report_broken_setting "the index in [] of the key must be an integer: #{e.message}", key: rule.key
+        next
+      end
+      @rewriterules.push([accessor, rule.pattern, invert, rule.tag, rule.label])
       @rule_keys[@rewriterules.last.first] = rule.key
       rewriterule_names.push([rule.key, invert, rule.pattern.to_s])
       log.info "adding rewrite_tag_filter rule: #{rule.key} #{@rewriterules.last}"
+    end
+    unless @broken_settings.empty?
+      raise Fluent::ConfigError, "rewrite_tag_filter: #{@broken_settings.join('. ')}"
     end
 
     if conf.keys.any? {|k| k.start_with?("rewriterule") }
@@ -286,14 +302,9 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     return result
   end
 
-  # Settings that are certainly broken are reported with report_broken_setting.
+  # Settings that are certainly broken stop the startup with report_broken_setting.
   # Settings that may not do what the user meant are reported with a warning.
   def check_rule(rule)
-    # Before the warnings were added, a wrong condition stopped the startup only when a range was used in both forms
-    # with one-digit numbers. Such a config has never started, so keep stopping it.
-    if rule.tag =~ /\$\{tag_parts\[\d\.\.\.?\d\]\}/ && rule.tag =~ /__TAG_PARTS\[\d\.\.\.?\d\]__/
-      raise Fluent::ConfigError, "${tag_parts[n]} and __TAG_PARTS[n]__ placeholder does not support range specify at #{rule}"
-    end
     # The tokens are replaced with a character that cannot be in a placeholder, so the text around them does not join
     # into a new one, and text that a token takes is not checked as a range.
     masked_tag = rule.tag.gsub(TAG_TOKEN_REGEXP, "\0")
@@ -358,10 +369,10 @@ class Fluent::Plugin::RewriteTagFilterOutput < Fluent::Plugin::Output
     !context_router.nil? && !root.nil? && context_router.equal?(root.event_router)
   end
 
-  # A config that has kept Fluentd running must not stop the startup after a minor update,
-  # so a certainly broken setting is only warned for now. The next major version will raise Fluent::ConfigError here.
-  # fields are logged after the message, like the other warnings.
+  # The settings are collected and configure raises Fluent::ConfigError with all of them, so they can be fixed at once.
+  # v2.5 only warned about them, so that a minor update did not stop a config that had kept Fluentd running.
+  # fields are put after the message as in the warnings.
   def report_broken_setting(message, **fields)
-    log.warn "rewrite_tag_filter: #{message}. The next major version will stop the startup with this setting", fields
+    @broken_settings << fields.inject(message) { |text, (name, value)| "#{text} #{name}=#{value.inspect}" }
   end
 end

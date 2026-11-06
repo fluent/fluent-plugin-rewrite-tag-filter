@@ -219,10 +219,10 @@ The rules are checked at startup. A setting that may not do what you meant is re
 - Text that looks like a placeholder but is not one (see "Tag placeholder").
 - An empty tag.
 
-The following settings are certainly broken. They are reported with a warning for now, and the next major version will stop the startup with a configuration error:
+The following settings are certainly broken, so they stop the startup with a configuration error. Before v3.0.0, a range with one-digit numbers in both forms already stopped the startup. The others were only reported with a warning in v2.5, and not reported in v2.4 and earlier:
 
 - A label that is not defined with `<label>`. `label @ROOT` and `label ""` need no `<label>`. The event stream that has a record for it raises the error, so Fluentd sends the whole stream to `@ERROR`, or the error goes back to the input without `<label @ERROR>`. When the plugin is in `<store ignore_error>` of `out_copy`, `out_copy` can catch the error before Fluentd routes it: it logs the error, and the stream does not go to `@ERROR`. `label @ERROR` is checked only at the top level, in a `<match>` or its `<store>` of `out_copy`, because `@ERROR` is set up after the other `<label>` sections. Define `<label @ERROR>` when a rule uses it. With `workers` more than 1, it is only warned, because a `<label>` in `<worker N>` is set up only in that worker. In `<worker N>`, the label must be defined for that worker.
-- A range in `${tag_parts[n]}` or `__TAG_PARTS[n]__`, such as `${tag_parts[0..2]}`. A tag that has a range with one-digit numbers in both forms, such as `t.${tag_parts[0..1]}.__TAG_PARTS[0..1]__`, already stops the startup, as in the earlier versions.
+- A range in `${tag_parts[n]}` or `__TAG_PARTS[n]__`, such as `${tag_parts[0..2]}`.
 
 ### Metrics
 
@@ -321,7 +321,7 @@ It is supported these placeholder for new_tag (rewritten tag).
 The placeholder of `${tag_parts[n]}` and `__TAG_PARTS[n]__` acts accessing the index which split the tag with "." (dot).  
 For example with `td.apache.access` tag, it will get `td` by `${tag_parts[0]}` and `apache` by `${tag_parts[1]}`.
 
-**Note** Currently, range expression ```${tag_parts[0..2]}``` is not supported. A warning is logged at startup when it is used, and the next major version will stop the startup (see "Checks at startup").
+**Note** Currently, range expression ```${tag_parts[0..2]}``` is not supported. It stops the startup with a configuration error (see "Checks at startup").
 
 Placeholder names are case-sensitive. A warning is logged at startup when the tag has text that looks like a placeholder but is not one of the above: `${...}`, or `__TAG__`, `__HOSTNAME__` or `__TAG_PARTS[n]__` in another case. Other text between double underscores, such as `app__web__log`, is a plain tag. `${unknown}`, `__UNKNOWN__` and `${tag_parts[01]}` expand to an empty string, and `${TAG}`, `__tag__` and `${tag_parts[-1]}` stay in the tag as written.
 
